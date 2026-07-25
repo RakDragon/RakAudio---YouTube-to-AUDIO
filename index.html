@@ -4,9 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extractor y Editor de Audio de YouTube</title>
+    <title>RakAUDIO</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Librerías de Wavesurfer y sus plugins -->
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
@@ -15,7 +14,7 @@
             appearance: none;
             width: 16px;
             height: 16px;
-            background: #3b82f6;
+            background: #FF422E;
             border-radius: 50%;
             cursor: pointer;
         }
@@ -32,7 +31,7 @@
             left: 0;
             bottom: 0;
             width: var(--progress, 0%);
-            background: rgba(59, 130, 246, 0.2);
+            background: rgba(255, 66, 46, 0.2);
             transition: width 0.3s ease-out;
             z-index: 0;
         }
@@ -46,7 +45,7 @@
         #waveformTrim ::part(region-handle-left),
         #waveformTrim ::part(region-handle-right) {
             width: 2px !important;
-            background-color: #ef4444 !important;
+            background-color: #FF422E !important;
             cursor: ew-resize;
         }
 
@@ -60,7 +59,7 @@
             transform: translate(-50%, -50%);
             width: 10px;
             height: 26px;
-            background-color: #ef4444;
+            background-color: #FF422E;
             border-radius: 3px;
             box-shadow: 0 0 5px rgba(0,0,0,0.6);
             transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
@@ -68,88 +67,88 @@
 
         #waveformTrim ::part(region-handle-left):hover::after,
         #waveformTrim ::part(region-handle-right):hover::after {
-            background-color: #f87171;
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+            background-color: #ff6454;
+            box-shadow: 0 0 8px rgba(255, 66, 46, 0.8);
             transform: translate(-50%, -50%) scale(1.1);
         }
 
         kbd {
-            background-color: #374151;
-            border: 1px solid #4b5563;
+            background-color: #3b3b3b;
+            border: 1px solid #555555;
             border-radius: 4px;
             padding: 2px 6px;
             font-size: 0.8em;
-            color: #d1d5db;
-            box-shadow: 0 2px 0 #1f2937;
+            color: #ffffff;
+            box-shadow: 0 2px 0 #1a1a1a;
         }
     </style>
 </head>
 
-<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+<body class="bg-[#1a1a1a] text-white min-h-screen font-sans">
 
     <div class="max-w-4xl mx-auto p-6">
-        <h1 class="text-3xl font-bold text-center mb-8 text-blue-400">YT Audio Pro Editor</h1>
+        <h1 class="text-3xl font-bold text-center mb-8 text-[#FF422E]">RakAUDIO</h1>
 
-        <div id="extractContainer" class="loading-bg bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
-            <label class="block text-sm font-medium mb-2">Pega el enlace del video de YouTube:</label>
+        <div id="extractContainer" class="loading-bg bg-[#2B2B2B] p-6 rounded-lg shadow-lg mb-6 border border-[#3b3b3b]">
+            <label class="block text-sm font-medium mb-2 text-white">Pega el enlace del video de YouTube:</label>
             <div class="flex gap-2">
                 <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..."
-                    class="flex-1 bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
+                    class="flex-1 bg-[#1f1f1f] text-white px-4 py-2 rounded border border-[#444] focus:outline-none focus:border-[#FF422E]">
                 <button id="btnExtraer"
-                    class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition z-10">Extraer
+                    class="bg-[#FF422E] hover:bg-[#d43726] px-6 py-2 rounded font-bold transition z-10 text-white">Extraer
                     Datos</button>
             </div>
-            <p id="statusMsg" class="text-sm mt-2 hidden z-10 font-mono"></p>
+            <p id="statusMsg" class="text-sm mt-2 hidden z-10 font-mono text-white"></p>
         </div>
 
         <div id="metadataSection"
-            class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col md:flex-row gap-6">
-            <img id="metaThumb" src="" alt="Portada" class="w-full md:w-64 rounded-lg object-cover shadow-md">
+            class="hidden bg-[#2B2B2B] p-6 rounded-lg shadow-lg mb-6 flex flex-col md:flex-row gap-6 border border-[#3b3b3b]">
+            <img id="metaThumb" src="" alt="Portada" class="w-full md:w-64 rounded-lg object-cover shadow-md border border-[#444]">
             <div class="flex-1 space-y-2">
                 <h2 id="metaTitle" class="text-xl font-bold text-white"></h2>
-                <p class="text-sm text-gray-400">Canal: <span id="metaChannel" class="text-gray-200"></span></p>
-                <p class="text-sm text-gray-400">Fecha de Subida: <span id="metaDate" class="text-gray-200"></span></p>
-                <p class="text-sm text-gray-400">Reproducciones: <span id="metaViews" class="text-gray-200"></span></p>
-                <p class="text-sm text-gray-400">Duración: <span id="metaDuration" class="text-gray-200"></span></p>
+                <p class="text-sm text-white opacity-80">Canal: <span id="metaChannel" class="font-bold opacity-100"></span></p>
+                <p class="text-sm text-white opacity-80">Fecha de Subida: <span id="metaDate" class="font-bold opacity-100"></span></p>
+                <p class="text-sm text-white opacity-80">Reproducciones: <span id="metaViews" class="font-bold opacity-100"></span></p>
+                <p class="text-sm text-white opacity-80">Duración: <span id="metaDuration" class="font-bold opacity-100"></span></p>
             </div>
         </div>
 
-        <div id="editorSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
-            <h3 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Previsualización y Ajustes Globales</h3>
+        <div id="editorSection" class="hidden bg-[#2B2B2B] p-6 rounded-lg shadow-lg mb-6 border border-[#3b3b3b]">
+            <h3 class="text-lg font-bold mb-4 border-b border-[#444] pb-2 text-white">Previsualización y Ajustes Globales</h3>
 
-            <div id="waveform" class="w-full bg-gray-900 rounded border border-gray-700 h-24"></div>
+            <div id="waveform" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-24"></div>
 
-            <div class="flex justify-between text-sm text-gray-400 mt-1 mb-4 font-mono px-1">
+            <div class="flex justify-between text-sm text-white opacity-80 mt-1 mb-4 font-mono px-1">
                 <span id="lblCurrentTime">0:00</span>
                 <span id="lblTotalTime">0:00</span>
             </div>
 
             <div
-                class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-750 p-3 rounded border border-gray-700">
+                class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-[#3b3b3b] p-3 rounded border border-[#444]">
                 <div class="flex items-center gap-2">
                     <button id="btnStart"
-                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&lt;&lt;</button>
+                        class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded font-bold text-white transition">&lt;&lt;</button>
                     <button id="btnMinus10"
-                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-10s</button>
-                    <button id="btnMinus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-5s</button>
-                    <button id="btnPlayPause" class="bg-blue-600 hover:bg-blue-500 px-6 py-1 rounded font-bold">►
+                        class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded text-sm text-white transition">-10s</button>
+                    <button id="btnMinus5" class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded text-sm text-white transition">-5s</button>
+                    <button id="btnPlayPause" class="bg-[#FF422E] hover:bg-[#d43726] px-6 py-1 rounded font-bold text-white transition">►
                         Play</button>
-                    <button id="btnPlus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+5s</button>
-                    <button id="btnPlus10" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+10s</button>
+                    <button id="btnPlus5" class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded text-sm text-white transition">+5s</button>
+                    <button id="btnPlus10" class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded text-sm text-white transition">+10s</button>
                     <button id="btnEnd"
-                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&gt;&gt;</button>
+                        class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded font-bold text-white transition">&gt;&gt;</button>
                 </div>
-                <div class="flex items-center gap-2 w-full md:w-auto">
+                <div class="flex items-center gap-2 w-full md:w-auto text-white">
                     <span class="text-sm">Vol:</span>
                     <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" class="w-24">
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div class="space-y-4">
+                <div class="space-y-4 text-white">
                     <div>
                         <label class="block text-sm mb-1">Formato de Salida:</label>
-                        <select id="outFormat" class="w-full bg-gray-700 p-2 rounded">
+                        <select id="outFormat" class="w-full bg-[#1f1f1f] border border-[#444] p-2 rounded focus:outline-none focus:border-[#FF422E]">
                             <option value="mp3">MP3</option>
                             <option value="m4a">M4A (AAC)</option>
                             <option value="wav">WAV</option>
@@ -157,7 +156,7 @@
                     </div>
                     <div>
                         <label class="block text-sm mb-1">Calidad (Bitrate para MP3 / M4A):</label>
-                        <select id="outQuality" class="w-full bg-gray-700 p-2 rounded">
+                        <select id="outQuality" class="w-full bg-[#1f1f1f] border border-[#444] p-2 rounded focus:outline-none focus:border-[#FF422E]">
                             <option value="320k">320 kbps (Alta)</option>
                             <option value="192k">192 kbps (Media)</option>
                             <option value="128k">128 kbps (Baja)</option>
@@ -165,8 +164,8 @@
                     </div>
                 </div>
 
-                <div class="space-y-4 bg-gray-750 p-4 rounded border border-gray-700">
-                    <h4 class="font-bold text-sm text-blue-400">Controles de Fade</h4>
+                <div class="space-y-4 bg-[#3b3b3b] p-4 rounded border border-[#444] text-white">
+                    <h4 class="font-bold text-sm text-[#FF422E]">Controles de Fade</h4>
                     <div>
                         <label class="block text-xs mb-1 flex justify-between">
                             <span>Fade In (Segundos):</span> <span id="lblFadeInG">0s</span>
@@ -183,62 +182,61 @@
             </div>
 
             <button id="btnOpenTrim"
-                class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded font-bold transition flex items-center justify-center gap-2">
+                class="w-full bg-[#FF422E] hover:bg-[#d43726] py-3 rounded font-bold transition flex items-center justify-center gap-2 text-white">
                 Recortar Audio
             </button>
         </div>
 
         <div id="trimModal"
             class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-            <div class="bg-gray-800 p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-gray-600 flex flex-col">
-                <div class="flex justify-between items-center mb-4">
+            <div class="bg-[#2B2B2B] p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-[#444] flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b border-[#444] pb-2">
                     <h3 class="text-xl font-bold text-white">Recorte de Audio</h3>
-                    <button id="btnCloseTrim" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                    <button id="btnCloseTrim" class="text-white opacity-60 hover:opacity-100 hover:text-[#FF422E] text-2xl transition">&times;</button>
                 </div>
 
                 <div class="mb-4">
-                    <div class="flex justify-between text-sm mb-2 font-mono">
-                        <span class="text-blue-300">Inicio: <span id="lblStart">0.00</span>s</span>
-                        <span class="text-green-400 font-bold bg-gray-900 px-2 rounded">Duración: <span
-                                id="lblTrimDuration">0.00</span>s</span>
-                        <span class="text-blue-300">Fin: <span id="lblEnd">0.00</span>s</span>
+                    <div class="flex justify-between text-sm mb-2 font-mono text-white">
+                        <span>Inicio: <span id="lblStart" class="font-bold">0.00</span>s</span>
+                        <span class="font-bold bg-[#1f1f1f] px-3 py-1 rounded border border-[#444]">Duración: <span
+                                id="lblTrimDuration" class="text-[#FF422E]">0.00</span>s</span>
+                        <span>Fin: <span id="lblEnd" class="font-bold">0.00</span>s</span>
                     </div>
 
-                    <div id="waveformTrim" class="w-full bg-gray-900 rounded border border-gray-700 h-32 relative">
+                    <div id="waveformTrim" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-32 relative">
                     </div>
                 </div>
 
-                <!-- Panel informativo de Atajos de Teclado -->
-                <div class="mb-4 bg-gray-900 p-4 rounded border border-gray-700 text-sm">
-                    <p class="font-bold text-gray-300 mb-3 border-b border-gray-700 pb-2 flex items-center flex-wrap gap-2">
+                <div class="mb-4 bg-[#1f1f1f] p-4 rounded border border-[#444] text-sm">
+                    <p class="font-bold text-white mb-3 border-b border-[#3b3b3b] pb-2 flex items-center flex-wrap gap-2">
                         Atajos de teclado
-                        <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white transition-all shadow-[0_0_8px_rgba(37,99,235,0.6)]">Moviendo Cabezal (2)</span>
+                        <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#444444] text-white transition-all shadow-[0_0_8px_rgba(255,255,255,0.2)]">Moviendo Cabezal (2)</span>
                     </p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-gray-400 font-mono text-xs">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-white opacity-90 font-mono text-xs">
                         <div><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> Foco Límite Izq / Cabezal / Der</div>
                         <div><kbd>Espacio</kbd> Play / Pausa</div>
                         <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
                         <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
                         <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
                         <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
-                        <div class="sm:col-span-2"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
+                        <div class="sm:col-span-2"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 ms)</div>
                     </div>
                 </div>
 
-                <div class="flex justify-end gap-3 mt-2 border-t border-gray-700 pt-4">
+                <div class="flex justify-end gap-3 mt-2 pt-2">
                     <button id="btnPlayTrim"
-                        class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded flex gap-2 items-center">
+                        class="bg-[#444] hover:bg-[#FF422E] px-4 py-2 rounded flex gap-2 items-center text-white transition">
                         <span id="playIconTrim">►</span> Escuchar Selección
                     </button>
                     <button id="btnApplyTrim"
-                        class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-bold">Aplicar</button>
+                        class="bg-[#FF422E] hover:bg-[#d43726] px-6 py-2 rounded font-bold text-white transition">Aplicar</button>
                 </div>
             </div>
         </div>
 
-        <div id="downloadSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg text-center">
+        <div id="downloadSection" class="hidden bg-[#2B2B2B] p-6 rounded-lg shadow-lg text-center border border-[#3b3b3b]">
             <button id="btnProcess"
-                class="loading-bg bg-green-600 hover:bg-green-500 w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(34,197,94,0.4)]">
+                class="loading-bg bg-[#FF422E] hover:bg-[#d43726] w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(255,66,46,0.4)] text-white">
                 <span>Procesar y Descargar Audio</span>
             </button>
         </div>
@@ -258,8 +256,7 @@
         let trimEndTime = 0;
         let currentEvtSource = null;
         
-        // Estado del foco del teclado
-        let activeMode = 'playhead'; // 'left', 'playhead', 'right'
+        let activeMode = 'playhead';
 
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
@@ -276,29 +273,27 @@
         const outFormat = document.getElementById('outFormat');
         const outQuality = document.getElementById('outQuality');
 
-        // Configuración reutilizable para el plugin Hover
         const hoverOptions = {
-            lineColor: 'rgba(255, 255, 255, 0.6)',
+            lineColor: '#FF422E',
             lineWidth: 2,
-            labelBackground: 'rgba(0, 0, 0, 0.8)',
+            labelBackground: '#FF422E',
             labelColor: '#fff',
             labelSize: '11px',
         };
 
-        // Función para cambiar visualmente el estado del modo seleccionado
         function setActiveMode(mode) {
             activeMode = mode;
             if (!activeModeBadge) return;
             
             if (mode === 'left') {
                 activeModeBadge.textContent = 'Ajuste Límite Izquierdo (1)';
-                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-600 text-white transition-all shadow-[0_0_8px_rgba(220,38,38,0.6)]';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#FF422E] text-white transition-all shadow-[0_0_8px_rgba(255,66,46,0.6)]';
             } else if (mode === 'right') {
                 activeModeBadge.textContent = 'Ajuste Límite Derecho (3)';
-                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-600 text-white transition-all shadow-[0_0_8px_rgba(220,38,38,0.6)]';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#FF422E] text-white transition-all shadow-[0_0_8px_rgba(255,66,46,0.6)]';
             } else {
                 activeModeBadge.textContent = 'Moviendo Cabezal (2)';
-                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white transition-all shadow-[0_0_8px_rgba(37,99,235,0.6)]';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#444444] text-white transition-all shadow-[0_0_8px_rgba(255,255,255,0.2)]';
             }
         }
 
@@ -324,7 +319,7 @@
         const showStatus = (msg, isError = false) => {
             statusMsg.textContent = msg;
             statusMsg.classList.remove('hidden');
-            statusMsg.className = `text-sm mt-2 block z-10 font-mono ${isError ? 'text-red-400' : 'text-green-400'}`;
+            statusMsg.className = `text-sm mt-2 block z-10 font-mono text-white ${isError ? 'font-bold' : ''}`;
         };
 
         const formatTime = (seconds) => {
@@ -338,9 +333,9 @@
             if (wsGlobal) wsGlobal.destroy();
             wsGlobal = WaveSurfer.create({
                 container: '#waveform',
-                waveColor: '#4b5563',
-                progressColor: '#3b82f6',
-                cursorColor: '#60a5fa',
+                waveColor: '#777777',
+                progressColor: '#FF422E',
+                cursorColor: '#ffffff',
                 barWidth: 2,
                 barRadius: 2,
                 height: 96,
@@ -449,8 +444,8 @@
                 const wsRegions = WaveSurfer.Regions.create();
                 wsTrim = WaveSurfer.create({
                     container: '#waveformTrim',
-                    waveColor: '#4b5563',
-                    progressColor: '#3b82f6',
+                    waveColor: '#777777',
+                    progressColor: '#FF422E',
                     cursorColor: '#ffffff',
                     height: 128,
                     url: audioUrlGlobal,
@@ -467,7 +462,7 @@
                     trimRegion = wsRegions.addRegion({
                         start: trimStartTime,
                         end: trimEndTime,
-                        color: 'rgba(59, 130, 246, 0.3)',
+                        color: 'rgba(255, 66, 46, 0.3)',
                         drag: false,
                         resize: true
                     });
@@ -531,9 +526,6 @@
             }
         });
 
-        // ---------------------------------------------------------
-        // EVENTOS DE ATAJOS DE TECLADO
-        // ---------------------------------------------------------
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
 
@@ -615,8 +607,8 @@
             const spanText = btnProcess.querySelector('span');
 
             btnProcess.disabled = true;
-            btnProcess.classList.remove('bg-green-600', 'hover:bg-green-500');
-            btnProcess.classList.add('bg-blue-600');
+            btnProcess.classList.remove('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
+            btnProcess.classList.add('bg-[#444444]');
 
             if (currentEvtSource) currentEvtSource.close();
             currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
@@ -627,12 +619,12 @@
                 spanText.textContent = data.msg;
 
                 if (data.status === 'done') {
-                    btnProcess.classList.remove('bg-blue-600');
-                    btnProcess.classList.add('bg-green-500');
+                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.add('bg-[#FF422E]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
                     currentEvtSource.close();
                 } else if (data.status === 'error') {
-                    btnProcess.classList.remove('bg-blue-600', 'bg-green-500');
-                    btnProcess.classList.add('bg-red-600');
+                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.add('bg-[#FF422E]');
                     currentEvtSource.close();
                 }
             };
@@ -670,8 +662,7 @@
 
                 setTimeout(() => {
                     btnProcess.disabled = false;
-                    btnProcess.classList.remove('bg-green-500');
-                    btnProcess.classList.add('bg-green-600', 'hover:bg-green-500');
+                    btnProcess.classList.add('hover:bg-[#d43726]');
                     spanText.textContent = 'Procesar y Descargar Audio';
                     btnProcess.style.setProperty('--progress', '0%');
                 }, 4000);
@@ -681,8 +672,8 @@
                 spanText.textContent = `Error: ${err.message}`;
                 setTimeout(() => {
                     btnProcess.disabled = false;
-                    btnProcess.classList.remove('bg-red-600');
-                    btnProcess.classList.add('bg-green-600', 'hover:bg-green-500');
+                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.add('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
                     spanText.textContent = 'Procesar y Descargar Audio';
                     btnProcess.style.setProperty('--progress', '0%');
                 }, 4000);
