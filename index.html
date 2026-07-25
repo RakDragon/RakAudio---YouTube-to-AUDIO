@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extractor y Editor de Audio de YouTube</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <style>
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .loading-bg {
+            position: relative;
+            overflow: hidden;
+        }
+        .loading-bg::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: var(--progress, 0%);
+            background: rgba(59, 130, 246, 0.2);
+            transition: width 0.3s ease-out;
+            z-index: 0;
+        }
+        .loading-bg > * {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <div class="max-w-4xl mx-auto p-6">
+        <h1 class="text-3xl font-bold text-center mb-8 text-blue-400">YT Audio Pro Editor</h1>
+
+        <div id="extractContainer" class="loading-bg bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
+            <label class="block text-sm font-medium mb-2">Pega el enlace del video de YouTube:</label>
+            <div class="flex gap-2">
+                <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." 
+                       class="flex-1 bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
+                <button id="btnExtraer" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition z-10">Extraer Datos</button>
+            </div>
+            <p id="statusMsg" class="text-sm mt-2 hidden z-10 font-mono"></p>
+        </div>
+
+        <div id="metadataSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col md:flex-row gap-6">
+            <img id="metaThumb" src="" alt="Portada" class="w-full md:w-64 rounded-lg object-cover shadow-md">
+            <div class="flex-1 space-y-2">
+                <h2 id="metaTitle" class="text-xl font-bold text-white"></h2>
+                <p class="text-sm text-gray-400">Canal: <span id="metaChannel" class="text-gray-200"></span></p>
+                <p class="text-sm text-gray-400">Fecha de Subida: <span id="metaDate" class="text-gray-200"></span></p>
+                <p class="text-sm text-gray-400">Reproducciones: <span id="metaViews" class="text-gray-200"></span></p>
+                <p class="text-sm text-gray-400">Duración: <span id="metaDuration" class="text-gray-200"></span></p>
+            </div>
+        </div>
+
+        <div id="editorSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
+            <h3 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Previsualización y Ajustes Globales</h3>
+            
+            <div id="waveform" class="w-full bg-gray-900 rounded mb-4 border border-gray-700 h-24"></div>
+            
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-750 p-3 rounded border border-gray-700">
+                <div class="flex items-center gap-2">
+                    <button id="btnStart" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&lt;&lt;</button>
+                    <button id="btnMinus10" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-10s</button>
+                    <button id="btnMinus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-5s</button>
+                    <button id="btnPlayPause" class="bg-blue-600 hover:bg-blue-500 px-6 py-1 rounded font-bold">► Play</button>
+                    <button id="btnPlus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+5s</button>
+                    <button id="btnPlus10" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+10s</button>
+                    <button id="btnEnd" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&gt;&gt;</button>
+                </div>
+                <div class="flex items-center gap-2 w-full md:w-auto">
+                    <span class="text-sm">Vol:</span>
+                    <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" class="w-24">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm mb-1">Formato de Salida:</label>
+                        <select id="outFormat" class="w-full bg-gray-700 p-2 rounded">
+                            <option value="mp3">MP3</option>
+                            <option value="m4a">M4A (AAC)</option>
+                            <option value="wav">WAV</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">Calidad (Bitrate para MP3 / M4A):</label>
+                        <select id="outQuality" class="w-full bg-gray-700 p-2 rounded">
+                            <option value="320k">320 kbps (Alta)</option>
+                            <option value="192k">192 kbps (Media)</option>
+                            <option value="128k">128 kbps (Baja)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-4 bg-gray-750 p-4 rounded border border-gray-700">
+                    <h4 class="font-bold text-sm text-blue-400">Controles de Fade</h4>
+                    <div>
+                        <label class="block text-xs mb-1 flex justify-between">
+                            <span>Fade In (Segundos):</span> <span id="lblFadeInG">0s</span>
+                        </label>
+                        <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                    </div>
+                    <div>
+                        <label class="block text-xs mb-1 flex justify-between">
+                            <span>Fade Out (Segundos):</span> <span id="lblFadeOutG">0s</span>
+                        </label>
+                        <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <button id="btnOpenTrim" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded font-bold transition flex items-center justify-center gap-2">
+                Recortar Audio
+            </button>
+        </div>
+
+        <div id="trimModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
+            <div class="bg-gray-800 p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-gray-600">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-white">Recorte de Audio</h3>
+                    <button id="btnCloseTrim" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                
+                <div class="mb-6">
+                    <div class="flex justify-between text-sm mb-2 text-blue-300 font-mono">
+                        <span>Inicio: <span id="lblStart">0.00</span>s</span>
+                        <span>Fin: <span id="lblEnd">0.00</span>s</span>
+                    </div>
+                    <div id="waveformTrim" class="w-full bg-gray-900 rounded border border-gray-700 h-32 relative"></div>
+                    <p class="text-xs text-gray-400 mt-2">Arrastra los bordes de la zona azul para recortar. Haz clic dentro de la zona para mover el cabezal (|).</p>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-700">
+                    <button id="btnPlayTrim" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded flex gap-2 items-center">
+                        <span id="playIconTrim">►</span> Escuchar Selección
+                    </button>
+                    <button id="btnApplyTrim" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-bold">Aplicar</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="downloadSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg text-center">
+            <button id="btnProcess" class="loading-bg bg-green-600 hover:bg-green-500 w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(34,197,94,0.4)]">
+                <span>Procesar y Descargar Audio</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const clientId = Math.random().toString(36).substring(2, 15);
+        let videoDuration = 0;
+        let currentVideoId = '';
+        let currentExt = '';
+        
+        let wsGlobal = null;
+        let wsTrim = null;
+        let trimRegion = null;
+        let audioUrlGlobal = '';
+        let trimStartTime = 0;
+        let trimEndTime = 0;
+
+        const statusMsg = document.getElementById('statusMsg');
+        const extractContainer = document.getElementById('extractContainer');
+        const btnProcess = document.getElementById('btnProcess');
+        const lblStart = document.getElementById('lblStart');
+        const lblEnd = document.getElementById('lblEnd');
+
+        const outFormat = document.getElementById('outFormat');
+        const outQuality = document.getElementById('outQuality');
+
+        outFormat.addEventListener('change', (e) => {
+            if (e.target.value === 'wav') {
+                outQuality.disabled = true;
+                outQuality.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                outQuality.disabled = false;
+                outQuality.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+        outFormat.dispatchEvent(new Event('change'));
+        
+        const fInG = document.getElementById('fadeInGlobal');
+        const fOutG = document.getElementById('fadeOutGlobal');
+        const lFInG = document.getElementById('lblFadeInG');
+        const lFOutG = document.getElementById('lblFadeOutG');
+
+        fInG.addEventListener('input', () => lFInG.textContent = `${fInG.value}s`);
+        fOutG.addEventListener('input', () => lFOutG.textContent = `${fOutG.value}s`);
+
+        const showStatus = (msg, isError = false) => {
+            statusMsg.textContent = msg;
+            statusMsg.classList.remove('hidden');
+            statusMsg.className = `text-sm mt-2 block z-10 font-mono ${isError ? 'text-red-400' : 'text-green-400'}`;
+        };
+
+        const formatTime = (seconds) => {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        const initWaveSurfer = () => {
+            if (wsGlobal) wsGlobal.destroy();
+            wsGlobal = WaveSurfer.create({
+                container: '#waveform',
+                waveColor: '#4b5563',
+                progressColor: '#3b82f6',
+                cursorColor: '#60a5fa',
+                barWidth: 2,
+                barRadius: 2,
+                height: 96,
+                url: audioUrlGlobal
+            });
+
+            wsGlobal.on('play', () => document.getElementById('btnPlayPause').textContent = '❚❚ Pause');
+            wsGlobal.on('pause', () => document.getElementById('btnPlayPause').textContent = '► Play');
+        };
+
+        // Controles de previsualización
+        document.getElementById('btnPlayPause').addEventListener('click', () => wsGlobal.playPause());
+        document.getElementById('btnStart').addEventListener('click', () => wsGlobal.seekTo(0));
+        document.getElementById('btnEnd').addEventListener('click', () => wsGlobal.seekTo(1));
+        document.getElementById('btnMinus10').addEventListener('click', () => wsGlobal.skip(-10));
+        document.getElementById('btnMinus5').addEventListener('click', () => wsGlobal.skip(-5));
+        document.getElementById('btnPlus5').addEventListener('click', () => wsGlobal.skip(5));
+        document.getElementById('btnPlus10').addEventListener('click', () => wsGlobal.skip(10));
+        document.getElementById('volSlider').addEventListener('input', (e) => wsGlobal.setVolume(Number(e.target.value)));
+
+        // Extraer y procesar en tiempo real (SSE)
+        document.getElementById('btnExtraer').addEventListener('click', async () => {
+            const url = document.getElementById('ytUrl').value;
+            if (!url.includes('youtu')) return showStatus('Enlace no válido.', true);
+
+            // Escuchar barra de carga
+            const evtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            evtSource.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                extractContainer.style.setProperty('--progress', `${data.progress}%`);
+                showStatus(data.msg);
+                if (data.status === 'done' || data.status === 'error') evtSource.close();
+            };
+            
+            try {
+                const res = await fetch('http://localhost:5000/api/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, client_id: clientId })
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                
+                currentVideoId = data.id;
+                currentExt = data.ext;
+                audioUrlGlobal = data.audioUrl;
+
+                document.getElementById('metaTitle').textContent = data.title;
+                document.getElementById('metaChannel').textContent = data.uploader;
+                document.getElementById('metaViews').textContent = parseInt(data.views).toLocaleString();
+                document.getElementById('metaDate').textContent = data.uploadDate;
+                document.getElementById('metaThumb').src = data.thumbnailUrl;
+                document.getElementById('metaDuration').textContent = formatTime(data.duration);
+                
+                videoDuration = data.duration;
+                trimStartTime = 0;
+                trimEndTime = videoDuration;
+
+                document.getElementById('metadataSection').classList.remove('hidden');
+                document.getElementById('editorSection').classList.remove('hidden');
+                document.getElementById('downloadSection').classList.remove('hidden');
+                
+                initWaveSurfer();
+                
+                setTimeout(() => {
+                    extractContainer.style.setProperty('--progress', '0%');
+                }, 2000);
+
+            } catch (err) {
+                extractContainer.style.setProperty('--progress', '0%');
+                showStatus(`Error: ${err.message}`, true);
+            }
+        });
+
+        // Modal y recorte
+        document.getElementById('btnOpenTrim').addEventListener('click', () => {
+            document.getElementById('trimModal').classList.remove('hidden');
+            if (wsGlobal.isPlaying()) wsGlobal.pause();
+
+            if (!wsTrim) {
+                const wsRegions = WaveSurfer.Regions.create();
+                wsTrim = WaveSurfer.create({
+                    container: '#waveformTrim',
+                    waveColor: '#4b5563',
+                    progressColor: '#3b82f6',
+                    cursorColor: '#ffffff',
+                    height: 128,
+                    url: audioUrlGlobal,
+                    plugins: [wsRegions]
+                });
+
+                wsTrim.on('decode', () => {
+                    trimRegion = wsRegions.addRegion({
+                        start: trimStartTime,
+                        end: trimEndTime,
+                        color: 'rgba(59, 130, 246, 0.3)',
+                        drag: true,
+                        resize: true
+                    });
+
+                    trimRegion.on('update', () => {
+                        trimStartTime = trimRegion.start;
+                        trimEndTime = trimRegion.end;
+                        lblStart.textContent = trimStartTime.toFixed(2);
+                        lblEnd.textContent = trimEndTime.toFixed(2);
+                    });
+                });
+
+                wsTrim.on('interaction', () => {
+                    if (wsTrim.getCurrentTime() < trimStartTime || wsTrim.getCurrentTime() > trimEndTime) {
+                        wsTrim.setTime(trimStartTime);
+                    }
+                });
+
+                wsTrim.on('audioprocess', () => {
+                    if (wsTrim.getCurrentTime() >= trimEndTime) {
+                        wsTrim.pause();
+                        wsTrim.setTime(trimStartTime);
+                    }
+                });
+                
+                wsTrim.on('play', () => document.getElementById('playIconTrim').textContent = '❚❚');
+                wsTrim.on('pause', () => document.getElementById('playIconTrim').textContent = '►');
+            }
+        });
+
+        document.getElementById('btnCloseTrim').addEventListener('click', () => {
+            if(wsTrim && wsTrim.isPlaying()) wsTrim.pause();
+            document.getElementById('trimModal').classList.add('hidden');
+        });
+
+        document.getElementById('btnApplyTrim').addEventListener('click', () => {
+            if(wsTrim && wsTrim.isPlaying()) wsTrim.pause();
+            document.getElementById('trimModal').classList.add('hidden');
+        });
+
+        document.getElementById('btnPlayTrim').addEventListener('click', () => {
+            if (wsTrim.isPlaying()) {
+                wsTrim.pause();
+            } else {
+                if (wsTrim.getCurrentTime() < trimStartTime || wsTrim.getCurrentTime() > trimEndTime) {
+                    wsTrim.setTime(trimStartTime);
+                }
+                wsTrim.play();
+            }
+        });
+
+        // Botón final con SSE para FFmpeg
+        btnProcess.addEventListener('click', async () => {
+            const format = document.getElementById('outFormat').value;
+            const quality = document.getElementById('outQuality').value;
+            const spanText = btnProcess.querySelector('span');
+            
+            btnProcess.disabled = true;
+            btnProcess.classList.remove('bg-green-600', 'hover:bg-green-500');
+            btnProcess.classList.add('bg-blue-600');
+            
+            const evtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            evtSource.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                btnProcess.style.setProperty('--progress', `${data.progress}%`);
+                spanText.textContent = data.msg;
+                
+                if (data.status === 'done') {
+                    btnProcess.classList.remove('bg-blue-600');
+                    btnProcess.classList.add('bg-green-500');
+                    evtSource.close();
+                } else if (data.status === 'error') {
+                    btnProcess.classList.remove('bg-blue-600', 'bg-green-500');
+                    btnProcess.classList.add('bg-red-600');
+                    evtSource.close();
+                }
+            };
+
+            try {
+                const res = await fetch('http://localhost:5000/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        id: currentVideoId,
+                        ext: currentExt,
+                        start: trimStartTime,
+                        end: trimEndTime,
+                        fadeIn: parseFloat(fInG.value),
+                        fadeOut: parseFloat(fOutG.value),
+                        format: format,
+                        quality: quality
+                    })
+                });
+
+                if (!res.ok) throw new Error('Error en el servidor al generar audio.');
+
+                const blob = await res.blob();
+                spanText.textContent = '¡Proceso finalizado con éxito! Descarga iniciada.';
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const titleForFile = document.getElementById('metaTitle').textContent.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'audio';
+                a.download = `${titleForFile}_editado.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                setTimeout(() => {
+                    btnProcess.disabled = false;
+                    btnProcess.classList.remove('bg-green-500');
+                    btnProcess.classList.add('bg-green-600', 'hover:bg-green-500');
+                    spanText.textContent = 'Procesar y Descargar Audio';
+                    btnProcess.style.setProperty('--progress', '0%');
+                }, 4000);
+
+            } catch (err) {
+                spanText.textContent = `Error: ${err.message}`;
+                setTimeout(() => {
+                    btnProcess.disabled = false;
+                    btnProcess.classList.remove('bg-red-600');
+                    btnProcess.classList.add('bg-green-600', 'hover:bg-green-500');
+                    spanText.textContent = 'Procesar y Descargar Audio';
+                    btnProcess.style.setProperty('--progress', '0%');
+                }, 4000);
+            }
+        });
+    </script>
+</body>
+</html>

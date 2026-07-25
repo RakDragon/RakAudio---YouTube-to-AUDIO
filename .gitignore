@@ -1,0 +1,6 @@
+temp_audio/
+processed_audio/
+__pycache__/
+*.pyc
+.env
+venv/
