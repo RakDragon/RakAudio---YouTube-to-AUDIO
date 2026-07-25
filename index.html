@@ -39,7 +39,7 @@
             position: relative;
             z-index: 1;
         }
-        
+
         /* Estilos personalizados para los límites de la zona de recorte */
         #waveformTrim ::part(region-handle-left),
         #waveformTrim ::part(region-handle-right) {
@@ -64,15 +64,13 @@
             transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
         }
 
-        /* Efecto Hover para el rectángulo central */
         #waveformTrim ::part(region-handle-left):hover::after,
         #waveformTrim ::part(region-handle-right):hover::after {
             background-color: #f87171;
             box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
             transform: translate(-50%, -50%) scale(1.1);
         }
-        
-        /* Estilo visual para las teclas (kbd) */
+
         kbd {
             background-color: #374151;
             border: 1px solid #4b5563;
@@ -210,14 +208,18 @@
 
                 <!-- Panel informativo de Atajos de Teclado -->
                 <div class="mb-4 bg-gray-900 p-4 rounded border border-gray-700 text-sm">
-                    <p class="font-bold text-gray-300 mb-3 border-b border-gray-700 pb-1">Atajos de teclado</p>
+                    <p class="font-bold text-gray-300 mb-3 border-b border-gray-700 pb-2 flex items-center flex-wrap gap-2">
+                        Atajos de teclado
+                        <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white transition-all shadow-[0_0_8px_rgba(37,99,235,0.6)]">Moviendo Cabezal (2)</span>
+                    </p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-gray-400 font-mono text-xs">
+                        <div><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> Foco Límite Izq / Cabezal / Der</div>
                         <div><kbd>Espacio</kbd> Play / Pausa</div>
                         <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
                         <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
                         <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
                         <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
-                        <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
+                        <div class="sm:col-span-2"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
                     </div>
                 </div>
 
@@ -253,6 +255,9 @@
         let trimStartTime = 0;
         let trimEndTime = 0;
         let currentEvtSource = null;
+        
+        // Estado del foco del teclado
+        let activeMode = 'playhead'; // 'left', 'playhead', 'right'
 
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
@@ -264,9 +269,27 @@
         const lblStart = document.getElementById('lblStart');
         const lblEnd = document.getElementById('lblEnd');
         const lblTrimDuration = document.getElementById('lblTrimDuration');
+        const activeModeBadge = document.getElementById('activeModeBadge');
 
         const outFormat = document.getElementById('outFormat');
         const outQuality = document.getElementById('outQuality');
+
+        // Función para cambiar visualmente el estado del modo seleccionado
+        function setActiveMode(mode) {
+            activeMode = mode;
+            if (!activeModeBadge) return;
+            
+            if (mode === 'left') {
+                activeModeBadge.textContent = 'Ajuste Límite Izquierdo (1)';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-600 text-white transition-all shadow-[0_0_8px_rgba(220,38,38,0.6)]';
+            } else if (mode === 'right') {
+                activeModeBadge.textContent = 'Ajuste Límite Derecho (3)';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-600 text-white transition-all shadow-[0_0_8px_rgba(220,38,38,0.6)]';
+            } else {
+                activeModeBadge.textContent = 'Moviendo Cabezal (2)';
+                activeModeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white transition-all shadow-[0_0_8px_rgba(37,99,235,0.6)]';
+            }
+        }
 
         outFormat.addEventListener('change', (e) => {
             if (e.target.value === 'wav') {
@@ -335,7 +358,7 @@
         document.getElementById('btnMinus5').addEventListener('click', () => wsGlobal.skip(-5));
         document.getElementById('btnPlus5').addEventListener('click', () => wsGlobal.skip(5));
         document.getElementById('btnPlus10').addEventListener('click', () => wsGlobal.skip(10));
-        
+
         const volSlider = document.getElementById('volSlider');
         volSlider.addEventListener('input', (e) => {
             const v = Number(e.target.value);
@@ -406,6 +429,8 @@
 
         document.getElementById('btnOpenTrim').addEventListener('click', () => {
             document.getElementById('trimModal').classList.remove('hidden');
+            setActiveMode('playhead'); // Reset al abrir
+            
             if (wsGlobal.isPlaying()) wsGlobal.pause();
 
             if (!wsTrim) {
@@ -421,7 +446,6 @@
                     plugins: [wsRegions]
                 });
 
-                // Igualar el volumen con el slider global
                 wsTrim.setVolume(Number(volSlider.value));
 
                 wsTrim.on('decode', () => {
@@ -438,6 +462,13 @@
                     lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
 
                     trimRegion.on('update', () => {
+                        // Detección automática al arrastrar bordes
+                        if (trimRegion.start !== trimStartTime && trimRegion.end === trimEndTime) {
+                            setActiveMode('left');
+                        } else if (trimRegion.end !== trimEndTime && trimRegion.start === trimStartTime) {
+                            setActiveMode('right');
+                        }
+
                         trimStartTime = trimRegion.start;
                         trimEndTime = trimRegion.end;
                         lblStart.textContent = trimStartTime.toFixed(2);
@@ -446,7 +477,9 @@
                     });
                 });
 
+                // Si hacen clic en la onda azul o gris, cambia el foco al cabezal de forma automática
                 wsTrim.on('interaction', () => {
+                    setActiveMode('playhead');
                     if (wsTrim.getCurrentTime() < trimStartTime || wsTrim.getCurrentTime() > trimEndTime) {
                         wsTrim.setTime(trimStartTime);
                     }
@@ -489,21 +522,23 @@
         // EVENTOS DE ATAJOS DE TECLADO
         // ---------------------------------------------------------
         document.addEventListener('keydown', (e) => {
-            // Ignorar atajos si el usuario está escribiendo en el input de URL
             if (e.target.tagName === 'INPUT') return;
 
-            // Determinar si controlamos el modal (recorte) o el principal
             const isModalOpen = !document.getElementById('trimModal').classList.contains('hidden');
             const activeWs = (isModalOpen && wsTrim) ? wsTrim : wsGlobal;
-
             if (!activeWs) return;
 
-            // Espacio: Play/Pausa
+            // Selección de Modo (1, 2, 3) solo dentro del Modal
+            if (isModalOpen && e.code === 'Digit1') { e.preventDefault(); setActiveMode('left'); }
+            if (isModalOpen && e.code === 'Digit2') { e.preventDefault(); setActiveMode('playhead'); }
+            if (isModalOpen && e.code === 'Digit3') { e.preventDefault(); setActiveMode('right'); }
+
+            // Reproducir / Pausar
             if (e.code === 'Space') {
-                e.preventDefault(); // Evitar que la página baje
+                e.preventDefault(); 
                 activeWs.playPause();
             } 
-            // Flecha Arriba: Subir volumen
+            // Volumen Arriba / Abajo
             else if (e.code === 'ArrowUp') {
                 e.preventDefault();
                 let v = Math.min(1, activeWs.getVolume() + 0.05);
@@ -511,7 +546,6 @@
                 if(wsTrim) wsTrim.setVolume(v);
                 volSlider.value = v;
             } 
-            // Flecha Abajo: Bajar volumen
             else if (e.code === 'ArrowDown') {
                 e.preventDefault();
                 let v = Math.max(0, activeWs.getVolume() - 0.05);
@@ -519,28 +553,54 @@
                 if(wsTrim) wsTrim.setVolume(v);
                 volSlider.value = v;
             } 
-            // Flechas Izquierda/Derecha: Saltos de tiempo
+            // Navegación de tiempo basada en el Modo Activo
             else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
                 e.preventDefault();
                 const direction = e.code === 'ArrowRight' ? 1 : -1;
-                let step = 10; // Default 10s
-
-                if (e.ctrlKey && e.shiftKey) step = 0.001; // Ctrl + Shift: 1 ms
-                else if (e.shiftKey) step = 5;             // Shift: 5s
-                else if (e.ctrlKey) step = 1;              // Ctrl: 1s
-
-                let newTime = activeWs.getCurrentTime() + (step * direction);
                 
-                // Limitar al recorte si estamos en el modal
+                let step = 10; 
+                if (e.ctrlKey && e.shiftKey) step = 0.001;
+                else if (e.shiftKey) step = 5;             
+                else if (e.ctrlKey) step = 1;              
+
                 if (isModalOpen) {
-                    if (newTime < trimStartTime) newTime = trimStartTime;
-                    if (newTime > trimEndTime) newTime = trimEndTime;
-                } else {
+                    // Controlando límite izquierdo '['
+                    if (activeMode === 'left' && trimRegion) {
+                        let newStart = trimStartTime + (step * direction);
+                        if (newStart < 0) newStart = 0;
+                        if (newStart >= trimEndTime - 0.01) newStart = trimEndTime - 0.01; 
+                        
+                        trimRegion.setOptions({ start: newStart });
+                        trimStartTime = newStart;
+                        lblStart.textContent = trimStartTime.toFixed(2);
+                        lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+                    } 
+                    // Controlando límite derecho ']'
+                    else if (activeMode === 'right' && trimRegion) {
+                        let newEnd = trimEndTime + (step * direction);
+                        if (newEnd > videoDuration) newEnd = videoDuration;
+                        if (newEnd <= trimStartTime + 0.01) newEnd = trimStartTime + 0.01;
+                        
+                        trimRegion.setOptions({ end: newEnd });
+                        trimEndTime = newEnd;
+                        lblEnd.textContent = trimEndTime.toFixed(2);
+                        lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+                    } 
+                    // Controlando el cabezal de audio '|'
+                    else {
+                        let newTime = activeWs.getCurrentTime() + (step * direction);
+                        if (newTime < trimStartTime) newTime = trimStartTime;
+                        if (newTime > trimEndTime) newTime = trimEndTime;
+                        activeWs.setTime(newTime);
+                    }
+                } 
+                // Fuera del modal (siempre controla cabezal)
+                else {
+                    let newTime = activeWs.getCurrentTime() + (step * direction);
                     if (newTime < 0) newTime = 0;
                     if (newTime > videoDuration) newTime = videoDuration;
+                    activeWs.setTime(newTime);
                 }
-                
-                activeWs.setTime(newTime);
             }
         });
 
