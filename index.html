@@ -6,8 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extractor y Editor de Audio de YouTube</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librerías de Wavesurfer y sus plugins -->
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
     <style>
         input[type=range]::-webkit-slider-thumb {
             appearance: none;
@@ -274,6 +276,15 @@
         const outFormat = document.getElementById('outFormat');
         const outQuality = document.getElementById('outQuality');
 
+        // Configuración reutilizable para el plugin Hover
+        const hoverOptions = {
+            lineColor: 'rgba(255, 255, 255, 0.6)',
+            lineWidth: 2,
+            labelBackground: 'rgba(0, 0, 0, 0.8)',
+            labelColor: '#fff',
+            labelSize: '11px',
+        };
+
         // Función para cambiar visualmente el estado del modo seleccionado
         function setActiveMode(mode) {
             activeMode = mode;
@@ -333,7 +344,8 @@
                 barWidth: 2,
                 barRadius: 2,
                 height: 96,
-                url: audioUrlGlobal
+                url: audioUrlGlobal,
+                plugins: [WaveSurfer.Hover.create(hoverOptions)]
             });
 
             wsGlobal.on('play', () => document.getElementById('btnPlayPause').textContent = '❚❚ Pause');
@@ -429,7 +441,7 @@
 
         document.getElementById('btnOpenTrim').addEventListener('click', () => {
             document.getElementById('trimModal').classList.remove('hidden');
-            setActiveMode('playhead'); // Reset al abrir
+            setActiveMode('playhead'); 
             
             if (wsGlobal.isPlaying()) wsGlobal.pause();
 
@@ -443,7 +455,10 @@
                     height: 128,
                     url: audioUrlGlobal,
                     dragToSeek: true,
-                    plugins: [wsRegions]
+                    plugins: [
+                        wsRegions,
+                        WaveSurfer.Hover.create(hoverOptions)
+                    ]
                 });
 
                 wsTrim.setVolume(Number(volSlider.value));
@@ -462,7 +477,6 @@
                     lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
 
                     trimRegion.on('update', () => {
-                        // Detección automática al arrastrar bordes
                         if (trimRegion.start !== trimStartTime && trimRegion.end === trimEndTime) {
                             setActiveMode('left');
                         } else if (trimRegion.end !== trimEndTime && trimRegion.start === trimStartTime) {
@@ -477,7 +491,6 @@
                     });
                 });
 
-                // Si hacen clic en la onda azul o gris, cambia el foco al cabezal de forma automática
                 wsTrim.on('interaction', () => {
                     setActiveMode('playhead');
                     if (wsTrim.getCurrentTime() < trimStartTime || wsTrim.getCurrentTime() > trimEndTime) {
@@ -528,17 +541,14 @@
             const activeWs = (isModalOpen && wsTrim) ? wsTrim : wsGlobal;
             if (!activeWs) return;
 
-            // Selección de Modo (1, 2, 3) solo dentro del Modal
             if (isModalOpen && e.code === 'Digit1') { e.preventDefault(); setActiveMode('left'); }
             if (isModalOpen && e.code === 'Digit2') { e.preventDefault(); setActiveMode('playhead'); }
             if (isModalOpen && e.code === 'Digit3') { e.preventDefault(); setActiveMode('right'); }
 
-            // Reproducir / Pausar
             if (e.code === 'Space') {
                 e.preventDefault(); 
                 activeWs.playPause();
             } 
-            // Volumen Arriba / Abajo
             else if (e.code === 'ArrowUp') {
                 e.preventDefault();
                 let v = Math.min(1, activeWs.getVolume() + 0.05);
@@ -553,7 +563,6 @@
                 if(wsTrim) wsTrim.setVolume(v);
                 volSlider.value = v;
             } 
-            // Navegación de tiempo basada en el Modo Activo
             else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
                 e.preventDefault();
                 const direction = e.code === 'ArrowRight' ? 1 : -1;
@@ -564,7 +573,6 @@
                 else if (e.ctrlKey) step = 1;              
 
                 if (isModalOpen) {
-                    // Controlando límite izquierdo '['
                     if (activeMode === 'left' && trimRegion) {
                         let newStart = trimStartTime + (step * direction);
                         if (newStart < 0) newStart = 0;
@@ -575,7 +583,6 @@
                         lblStart.textContent = trimStartTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                     } 
-                    // Controlando límite derecho ']'
                     else if (activeMode === 'right' && trimRegion) {
                         let newEnd = trimEndTime + (step * direction);
                         if (newEnd > videoDuration) newEnd = videoDuration;
@@ -586,7 +593,6 @@
                         lblEnd.textContent = trimEndTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                     } 
-                    // Controlando el cabezal de audio '|'
                     else {
                         let newTime = activeWs.getCurrentTime() + (step * direction);
                         if (newTime < trimStartTime) newTime = trimStartTime;
@@ -594,7 +600,6 @@
                         activeWs.setTime(newTime);
                     }
                 } 
-                // Fuera del modal (siempre controla cabezal)
                 else {
                     let newTime = activeWs.getCurrentTime() + (step * direction);
                     if (newTime < 0) newTime = 0;
