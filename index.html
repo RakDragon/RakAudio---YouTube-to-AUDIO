@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,25 +17,74 @@
             border-radius: 50%;
             cursor: pointer;
         }
+
         .loading-bg {
             position: relative;
             overflow: hidden;
         }
+
         .loading-bg::before {
             content: "";
             position: absolute;
-            top: 0; left: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            bottom: 0;
             width: var(--progress, 0%);
             background: rgba(59, 130, 246, 0.2);
             transition: width 0.3s ease-out;
             z-index: 0;
         }
-        .loading-bg > * {
+
+        .loading-bg>* {
             position: relative;
             z-index: 1;
         }
+        
+        /* Estilos personalizados para los límites de la zona de recorte */
+        #waveformTrim ::part(region-handle-left),
+        #waveformTrim ::part(region-handle-right) {
+            width: 2px !important;
+            background-color: #ef4444 !important;
+            cursor: ew-resize;
+        }
+
+        /* Rectángulo central para las líneas de límite */
+        #waveformTrim ::part(region-handle-left)::after,
+        #waveformTrim ::part(region-handle-right)::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px;
+            height: 26px;
+            background-color: #ef4444;
+            border-radius: 3px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.6);
+            transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
+        }
+
+        /* Efecto Hover para el rectángulo central */
+        #waveformTrim ::part(region-handle-left):hover::after,
+        #waveformTrim ::part(region-handle-right):hover::after {
+            background-color: #f87171;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+        
+        /* Estilo visual para las teclas (kbd) */
+        kbd {
+            background-color: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.8em;
+            color: #d1d5db;
+            box-shadow: 0 2px 0 #1f2937;
+        }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
 
     <div class="max-w-4xl mx-auto p-6">
@@ -43,14 +93,17 @@
         <div id="extractContainer" class="loading-bg bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
             <label class="block text-sm font-medium mb-2">Pega el enlace del video de YouTube:</label>
             <div class="flex gap-2">
-                <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." 
-                       class="flex-1 bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
-                <button id="btnExtraer" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition z-10">Extraer Datos</button>
+                <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..."
+                    class="flex-1 bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
+                <button id="btnExtraer"
+                    class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition z-10">Extraer
+                    Datos</button>
             </div>
             <p id="statusMsg" class="text-sm mt-2 hidden z-10 font-mono"></p>
         </div>
 
-        <div id="metadataSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col md:flex-row gap-6">
+        <div id="metadataSection"
+            class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col md:flex-row gap-6">
             <img id="metaThumb" src="" alt="Portada" class="w-full md:w-64 rounded-lg object-cover shadow-md">
             <div class="flex-1 space-y-2">
                 <h2 id="metaTitle" class="text-xl font-bold text-white"></h2>
@@ -63,24 +116,28 @@
 
         <div id="editorSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
             <h3 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Previsualización y Ajustes Globales</h3>
-            
+
             <div id="waveform" class="w-full bg-gray-900 rounded border border-gray-700 h-24"></div>
-            
-            <!-- Contadores de tiempo añadidos aquí -->
+
             <div class="flex justify-between text-sm text-gray-400 mt-1 mb-4 font-mono px-1">
                 <span id="lblCurrentTime">0:00</span>
                 <span id="lblTotalTime">0:00</span>
             </div>
-            
-            <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-750 p-3 rounded border border-gray-700">
+
+            <div
+                class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-750 p-3 rounded border border-gray-700">
                 <div class="flex items-center gap-2">
-                    <button id="btnStart" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&lt;&lt;</button>
-                    <button id="btnMinus10" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-10s</button>
+                    <button id="btnStart"
+                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&lt;&lt;</button>
+                    <button id="btnMinus10"
+                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-10s</button>
                     <button id="btnMinus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">-5s</button>
-                    <button id="btnPlayPause" class="bg-blue-600 hover:bg-blue-500 px-6 py-1 rounded font-bold">► Play</button>
+                    <button id="btnPlayPause" class="bg-blue-600 hover:bg-blue-500 px-6 py-1 rounded font-bold">►
+                        Play</button>
                     <button id="btnPlus5" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+5s</button>
                     <button id="btnPlus10" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm">+10s</button>
-                    <button id="btnEnd" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&gt;&gt;</button>
+                    <button id="btnEnd"
+                        class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">&gt;&gt;</button>
                 </div>
                 <div class="flex items-center gap-2 w-full md:w-auto">
                     <span class="text-sm">Vol:</span>
@@ -125,41 +182,59 @@
                 </div>
             </div>
 
-            <button id="btnOpenTrim" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded font-bold transition flex items-center justify-center gap-2">
+            <button id="btnOpenTrim"
+                class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded font-bold transition flex items-center justify-center gap-2">
                 Recortar Audio
             </button>
         </div>
 
-        <div id="trimModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-            <div class="bg-gray-800 p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-gray-600">
+        <div id="trimModal"
+            class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
+            <div class="bg-gray-800 p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-gray-600 flex flex-col">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-bold text-white">Recorte de Audio</h3>
                     <button id="btnCloseTrim" class="text-gray-400 hover:text-white text-2xl">&times;</button>
                 </div>
-                
-                <div class="mb-6">
-                    <!-- Duración en el centro agregada aquí -->
+
+                <div class="mb-4">
                     <div class="flex justify-between text-sm mb-2 font-mono">
                         <span class="text-blue-300">Inicio: <span id="lblStart">0.00</span>s</span>
-                        <span class="text-green-400 font-bold bg-gray-900 px-2 rounded">Duración: <span id="lblTrimDuration">0.00</span>s</span>
+                        <span class="text-green-400 font-bold bg-gray-900 px-2 rounded">Duración: <span
+                                id="lblTrimDuration">0.00</span>s</span>
                         <span class="text-blue-300">Fin: <span id="lblEnd">0.00</span>s</span>
                     </div>
-                    
-                    <div id="waveformTrim" class="w-full bg-gray-900 rounded border border-gray-700 h-32 relative"></div>
-                    <p class="text-xs text-gray-400 mt-2">Arrastra los bordes de la zona azul para recortar. Haz clic dentro de la zona para mover el cabezal (|).</p>
+
+                    <div id="waveformTrim" class="w-full bg-gray-900 rounded border border-gray-700 h-32 relative">
+                    </div>
                 </div>
 
-                <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-700">
-                    <button id="btnPlayTrim" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded flex gap-2 items-center">
+                <!-- Panel informativo de Atajos de Teclado -->
+                <div class="mb-4 bg-gray-900 p-4 rounded border border-gray-700 text-sm">
+                    <p class="font-bold text-gray-300 mb-3 border-b border-gray-700 pb-1">Atajos de teclado</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-gray-400 font-mono text-xs">
+                        <div><kbd>Espacio</kbd> Play / Pausa</div>
+                        <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
+                        <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
+                        <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
+                        <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
+                        <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-2 border-t border-gray-700 pt-4">
+                    <button id="btnPlayTrim"
+                        class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded flex gap-2 items-center">
                         <span id="playIconTrim">►</span> Escuchar Selección
                     </button>
-                    <button id="btnApplyTrim" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-bold">Aplicar</button>
+                    <button id="btnApplyTrim"
+                        class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-bold">Aplicar</button>
                 </div>
             </div>
         </div>
 
         <div id="downloadSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg text-center">
-            <button id="btnProcess" class="loading-bg bg-green-600 hover:bg-green-500 w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(34,197,94,0.4)]">
+            <button id="btnProcess"
+                class="loading-bg bg-green-600 hover:bg-green-500 w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(34,197,94,0.4)]">
                 <span>Procesar y Descargar Audio</span>
             </button>
         </div>
@@ -170,24 +245,22 @@
         let videoDuration = 0;
         let currentVideoId = '';
         let currentExt = '';
-        
+
         let wsGlobal = null;
         let wsTrim = null;
         let trimRegion = null;
         let audioUrlGlobal = '';
         let trimStartTime = 0;
         let trimEndTime = 0;
-        let currentEvtSource = null; // Gestor global de conexión SSE
+        let currentEvtSource = null;
 
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
         const btnProcess = document.getElementById('btnProcess');
-        
-        // Elementos de tiempo main page
+
         const lblCurrentTime = document.getElementById('lblCurrentTime');
         const lblTotalTime = document.getElementById('lblTotalTime');
-        
-        // Elementos de tiempo modal
+
         const lblStart = document.getElementById('lblStart');
         const lblEnd = document.getElementById('lblEnd');
         const lblTrimDuration = document.getElementById('lblTrimDuration');
@@ -205,7 +278,7 @@
             }
         });
         outFormat.dispatchEvent(new Event('change'));
-        
+
         const fInG = document.getElementById('fadeInGlobal');
         const fOutG = document.getElementById('fadeOutGlobal');
         const lFInG = document.getElementById('lblFadeInG');
@@ -242,8 +315,7 @@
 
             wsGlobal.on('play', () => document.getElementById('btnPlayPause').textContent = '❚❚ Pause');
             wsGlobal.on('pause', () => document.getElementById('btnPlayPause').textContent = '► Play');
-            
-            // Actualizar contadores de tiempo
+
             wsGlobal.on('ready', () => {
                 lblTotalTime.textContent = formatTime(wsGlobal.getDuration());
                 lblCurrentTime.textContent = formatTime(0);
@@ -263,16 +335,20 @@
         document.getElementById('btnMinus5').addEventListener('click', () => wsGlobal.skip(-5));
         document.getElementById('btnPlus5').addEventListener('click', () => wsGlobal.skip(5));
         document.getElementById('btnPlus10').addEventListener('click', () => wsGlobal.skip(10));
-        document.getElementById('volSlider').addEventListener('input', (e) => wsGlobal.setVolume(Number(e.target.value)));
+        
+        const volSlider = document.getElementById('volSlider');
+        volSlider.addEventListener('input', (e) => {
+            const v = Number(e.target.value);
+            if (wsGlobal) wsGlobal.setVolume(v);
+            if (wsTrim) wsTrim.setVolume(v);
+        });
 
         document.getElementById('btnExtraer').addEventListener('click', async () => {
             const url = document.getElementById('ytUrl').value;
             if (!url.includes('youtu')) return showStatus('Enlace no válido.', true);
 
-            // Cerrar conexión anterior si existía
-            if(currentEvtSource) currentEvtSource.close();
-            
-            // Lógica para prevenir duplicación del audio si pegan otro enlace
+            if (currentEvtSource) currentEvtSource.close();
+
             if (wsTrim) {
                 wsTrim.destroy();
                 wsTrim = null;
@@ -285,17 +361,17 @@
                 showStatus(data.msg);
                 if (data.status === 'done' || data.status === 'error') currentEvtSource.close();
             };
-            
+
             try {
                 const res = await fetch('http://localhost:5000/api/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: url, client_id: clientId })
                 });
-                
+
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
-                
+
                 currentVideoId = data.id;
                 currentExt = data.ext;
                 audioUrlGlobal = data.audioUrl;
@@ -306,7 +382,7 @@
                 document.getElementById('metaDate').textContent = data.uploadDate;
                 document.getElementById('metaThumb').src = data.thumbnailUrl;
                 document.getElementById('metaDuration').textContent = formatTime(data.duration);
-                
+
                 videoDuration = data.duration;
                 trimStartTime = 0;
                 trimEndTime = videoDuration;
@@ -314,15 +390,15 @@
                 document.getElementById('metadataSection').classList.remove('hidden');
                 document.getElementById('editorSection').classList.remove('hidden');
                 document.getElementById('downloadSection').classList.remove('hidden');
-                
+
                 initWaveSurfer();
-                
+
                 setTimeout(() => {
                     extractContainer.style.setProperty('--progress', '0%');
                 }, 2000);
 
             } catch (err) {
-                if(currentEvtSource) currentEvtSource.close();
+                if (currentEvtSource) currentEvtSource.close();
                 extractContainer.style.setProperty('--progress', '0%');
                 showStatus(`Error: ${err.message}`, true);
             }
@@ -341,19 +417,22 @@
                     cursorColor: '#ffffff',
                     height: 128,
                     url: audioUrlGlobal,
+                    dragToSeek: true,
                     plugins: [wsRegions]
                 });
+
+                // Igualar el volumen con el slider global
+                wsTrim.setVolume(Number(volSlider.value));
 
                 wsTrim.on('decode', () => {
                     trimRegion = wsRegions.addRegion({
                         start: trimStartTime,
                         end: trimEndTime,
                         color: 'rgba(59, 130, 246, 0.3)',
-                        drag: true,
+                        drag: false,
                         resize: true
                     });
 
-                    // Inicializar los valores la primera vez que se abre
                     lblStart.textContent = trimStartTime.toFixed(2);
                     lblEnd.textContent = trimEndTime.toFixed(2);
                     lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
@@ -363,7 +442,7 @@
                         trimEndTime = trimRegion.end;
                         lblStart.textContent = trimStartTime.toFixed(2);
                         lblEnd.textContent = trimEndTime.toFixed(2);
-                        lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2); // Cálculo de duración central
+                        lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                     });
                 });
 
@@ -379,19 +458,19 @@
                         wsTrim.setTime(trimStartTime);
                     }
                 });
-                
+
                 wsTrim.on('play', () => document.getElementById('playIconTrim').textContent = '❚❚');
                 wsTrim.on('pause', () => document.getElementById('playIconTrim').textContent = '►');
             }
         });
 
         document.getElementById('btnCloseTrim').addEventListener('click', () => {
-            if(wsTrim && wsTrim.isPlaying()) wsTrim.pause();
+            if (wsTrim && wsTrim.isPlaying()) wsTrim.pause();
             document.getElementById('trimModal').classList.add('hidden');
         });
 
         document.getElementById('btnApplyTrim').addEventListener('click', () => {
-            if(wsTrim && wsTrim.isPlaying()) wsTrim.pause();
+            if (wsTrim && wsTrim.isPlaying()) wsTrim.pause();
             document.getElementById('trimModal').classList.add('hidden');
         });
 
@@ -406,23 +485,82 @@
             }
         });
 
+        // ---------------------------------------------------------
+        // EVENTOS DE ATAJOS DE TECLADO
+        // ---------------------------------------------------------
+        document.addEventListener('keydown', (e) => {
+            // Ignorar atajos si el usuario está escribiendo en el input de URL
+            if (e.target.tagName === 'INPUT') return;
+
+            // Determinar si controlamos el modal (recorte) o el principal
+            const isModalOpen = !document.getElementById('trimModal').classList.contains('hidden');
+            const activeWs = (isModalOpen && wsTrim) ? wsTrim : wsGlobal;
+
+            if (!activeWs) return;
+
+            // Espacio: Play/Pausa
+            if (e.code === 'Space') {
+                e.preventDefault(); // Evitar que la página baje
+                activeWs.playPause();
+            } 
+            // Flecha Arriba: Subir volumen
+            else if (e.code === 'ArrowUp') {
+                e.preventDefault();
+                let v = Math.min(1, activeWs.getVolume() + 0.05);
+                if(wsGlobal) wsGlobal.setVolume(v);
+                if(wsTrim) wsTrim.setVolume(v);
+                volSlider.value = v;
+            } 
+            // Flecha Abajo: Bajar volumen
+            else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                let v = Math.max(0, activeWs.getVolume() - 0.05);
+                if(wsGlobal) wsGlobal.setVolume(v);
+                if(wsTrim) wsTrim.setVolume(v);
+                volSlider.value = v;
+            } 
+            // Flechas Izquierda/Derecha: Saltos de tiempo
+            else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+                e.preventDefault();
+                const direction = e.code === 'ArrowRight' ? 1 : -1;
+                let step = 10; // Default 10s
+
+                if (e.ctrlKey && e.shiftKey) step = 0.001; // Ctrl + Shift: 1 ms
+                else if (e.shiftKey) step = 5;             // Shift: 5s
+                else if (e.ctrlKey) step = 1;              // Ctrl: 1s
+
+                let newTime = activeWs.getCurrentTime() + (step * direction);
+                
+                // Limitar al recorte si estamos en el modal
+                if (isModalOpen) {
+                    if (newTime < trimStartTime) newTime = trimStartTime;
+                    if (newTime > trimEndTime) newTime = trimEndTime;
+                } else {
+                    if (newTime < 0) newTime = 0;
+                    if (newTime > videoDuration) newTime = videoDuration;
+                }
+                
+                activeWs.setTime(newTime);
+            }
+        });
+
         btnProcess.addEventListener('click', async () => {
             const format = document.getElementById('outFormat').value;
             const quality = document.getElementById('outQuality').value;
             const spanText = btnProcess.querySelector('span');
-            
+
             btnProcess.disabled = true;
             btnProcess.classList.remove('bg-green-600', 'hover:bg-green-500');
             btnProcess.classList.add('bg-blue-600');
-            
-            if(currentEvtSource) currentEvtSource.close();
+
+            if (currentEvtSource) currentEvtSource.close();
             currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
-            
+
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 btnProcess.style.setProperty('--progress', `${data.progress}%`);
                 spanText.textContent = data.msg;
-                
+
                 if (data.status === 'done') {
                     btnProcess.classList.remove('bg-blue-600');
                     btnProcess.classList.add('bg-green-500');
@@ -474,7 +612,7 @@
                 }, 4000);
 
             } catch (err) {
-                if(currentEvtSource) currentEvtSource.close();
+                if (currentEvtSource) currentEvtSource.close();
                 spanText.textContent = `Error: ${err.message}`;
                 setTimeout(() => {
                     btnProcess.disabled = false;
@@ -487,4 +625,5 @@
         });
     </script>
 </body>
+
 </html>
