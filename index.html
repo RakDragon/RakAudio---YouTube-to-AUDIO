@@ -64,7 +64,13 @@
         <div id="editorSection" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
             <h3 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Previsualización y Ajustes Globales</h3>
             
-            <div id="waveform" class="w-full bg-gray-900 rounded mb-4 border border-gray-700 h-24"></div>
+            <div id="waveform" class="w-full bg-gray-900 rounded border border-gray-700 h-24"></div>
+            
+            <!-- Contadores de tiempo añadidos aquí -->
+            <div class="flex justify-between text-sm text-gray-400 mt-1 mb-4 font-mono px-1">
+                <span id="lblCurrentTime">0:00</span>
+                <span id="lblTotalTime">0:00</span>
+            </div>
             
             <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-750 p-3 rounded border border-gray-700">
                 <div class="flex items-center gap-2">
@@ -132,10 +138,13 @@
                 </div>
                 
                 <div class="mb-6">
-                    <div class="flex justify-between text-sm mb-2 text-blue-300 font-mono">
-                        <span>Inicio: <span id="lblStart">0.00</span>s</span>
-                        <span>Fin: <span id="lblEnd">0.00</span>s</span>
+                    <!-- Duración en el centro agregada aquí -->
+                    <div class="flex justify-between text-sm mb-2 font-mono">
+                        <span class="text-blue-300">Inicio: <span id="lblStart">0.00</span>s</span>
+                        <span class="text-green-400 font-bold bg-gray-900 px-2 rounded">Duración: <span id="lblTrimDuration">0.00</span>s</span>
+                        <span class="text-blue-300">Fin: <span id="lblEnd">0.00</span>s</span>
                     </div>
+                    
                     <div id="waveformTrim" class="w-full bg-gray-900 rounded border border-gray-700 h-32 relative"></div>
                     <p class="text-xs text-gray-400 mt-2">Arrastra los bordes de la zona azul para recortar. Haz clic dentro de la zona para mover el cabezal (|).</p>
                 </div>
@@ -168,12 +177,20 @@
         let audioUrlGlobal = '';
         let trimStartTime = 0;
         let trimEndTime = 0;
+        let currentEvtSource = null; // Gestor global de conexión SSE
 
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
         const btnProcess = document.getElementById('btnProcess');
+        
+        // Elementos de tiempo main page
+        const lblCurrentTime = document.getElementById('lblCurrentTime');
+        const lblTotalTime = document.getElementById('lblTotalTime');
+        
+        // Elementos de tiempo modal
         const lblStart = document.getElementById('lblStart');
         const lblEnd = document.getElementById('lblEnd');
+        const lblTrimDuration = document.getElementById('lblTrimDuration');
 
         const outFormat = document.getElementById('outFormat');
         const outQuality = document.getElementById('outQuality');
@@ -204,6 +221,7 @@
         };
 
         const formatTime = (seconds) => {
+            if (isNaN(seconds)) return "0:00";
             const m = Math.floor(seconds / 60);
             const s = Math.floor(seconds % 60);
             return `${m}:${s.toString().padStart(2, '0')}`;
@@ -224,9 +242,20 @@
 
             wsGlobal.on('play', () => document.getElementById('btnPlayPause').textContent = '❚❚ Pause');
             wsGlobal.on('pause', () => document.getElementById('btnPlayPause').textContent = '► Play');
+            
+            // Actualizar contadores de tiempo
+            wsGlobal.on('ready', () => {
+                lblTotalTime.textContent = formatTime(wsGlobal.getDuration());
+                lblCurrentTime.textContent = formatTime(0);
+            });
+            wsGlobal.on('audioprocess', () => {
+                lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
+            });
+            wsGlobal.on('interaction', () => {
+                lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
+            });
         };
 
-        // Controles de previsualización
         document.getElementById('btnPlayPause').addEventListener('click', () => wsGlobal.playPause());
         document.getElementById('btnStart').addEventListener('click', () => wsGlobal.seekTo(0));
         document.getElementById('btnEnd').addEventListener('click', () => wsGlobal.seekTo(1));
@@ -236,18 +265,25 @@
         document.getElementById('btnPlus10').addEventListener('click', () => wsGlobal.skip(10));
         document.getElementById('volSlider').addEventListener('input', (e) => wsGlobal.setVolume(Number(e.target.value)));
 
-        // Extraer y procesar en tiempo real (SSE)
         document.getElementById('btnExtraer').addEventListener('click', async () => {
             const url = document.getElementById('ytUrl').value;
             if (!url.includes('youtu')) return showStatus('Enlace no válido.', true);
 
-            // Escuchar barra de carga
-            const evtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
-            evtSource.onmessage = (e) => {
+            // Cerrar conexión anterior si existía
+            if(currentEvtSource) currentEvtSource.close();
+            
+            // Lógica para prevenir duplicación del audio si pegan otro enlace
+            if (wsTrim) {
+                wsTrim.destroy();
+                wsTrim = null;
+            }
+
+            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 extractContainer.style.setProperty('--progress', `${data.progress}%`);
                 showStatus(data.msg);
-                if (data.status === 'done' || data.status === 'error') evtSource.close();
+                if (data.status === 'done' || data.status === 'error') currentEvtSource.close();
             };
             
             try {
@@ -286,12 +322,12 @@
                 }, 2000);
 
             } catch (err) {
+                if(currentEvtSource) currentEvtSource.close();
                 extractContainer.style.setProperty('--progress', '0%');
                 showStatus(`Error: ${err.message}`, true);
             }
         });
 
-        // Modal y recorte
         document.getElementById('btnOpenTrim').addEventListener('click', () => {
             document.getElementById('trimModal').classList.remove('hidden');
             if (wsGlobal.isPlaying()) wsGlobal.pause();
@@ -317,11 +353,17 @@
                         resize: true
                     });
 
+                    // Inicializar los valores la primera vez que se abre
+                    lblStart.textContent = trimStartTime.toFixed(2);
+                    lblEnd.textContent = trimEndTime.toFixed(2);
+                    lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+
                     trimRegion.on('update', () => {
                         trimStartTime = trimRegion.start;
                         trimEndTime = trimRegion.end;
                         lblStart.textContent = trimStartTime.toFixed(2);
                         lblEnd.textContent = trimEndTime.toFixed(2);
+                        lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2); // Cálculo de duración central
                     });
                 });
 
@@ -364,7 +406,6 @@
             }
         });
 
-        // Botón final con SSE para FFmpeg
         btnProcess.addEventListener('click', async () => {
             const format = document.getElementById('outFormat').value;
             const quality = document.getElementById('outQuality').value;
@@ -374,8 +415,10 @@
             btnProcess.classList.remove('bg-green-600', 'hover:bg-green-500');
             btnProcess.classList.add('bg-blue-600');
             
-            const evtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
-            evtSource.onmessage = (e) => {
+            if(currentEvtSource) currentEvtSource.close();
+            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            
+            currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 btnProcess.style.setProperty('--progress', `${data.progress}%`);
                 spanText.textContent = data.msg;
@@ -383,11 +426,11 @@
                 if (data.status === 'done') {
                     btnProcess.classList.remove('bg-blue-600');
                     btnProcess.classList.add('bg-green-500');
-                    evtSource.close();
+                    currentEvtSource.close();
                 } else if (data.status === 'error') {
                     btnProcess.classList.remove('bg-blue-600', 'bg-green-500');
                     btnProcess.classList.add('bg-red-600');
-                    evtSource.close();
+                    currentEvtSource.close();
                 }
             };
 
@@ -431,6 +474,7 @@
                 }, 4000);
 
             } catch (err) {
+                if(currentEvtSource) currentEvtSource.close();
                 spanText.textContent = `Error: ${err.message}`;
                 setTimeout(() => {
                     btnProcess.disabled = false;
