@@ -362,14 +362,14 @@
                         <div>
                             <label class="block text-sm font-bold mb-2 flex justify-between items-center">
                                 <span>Fade In (Segundos):</span> 
-                                <span><input type="number" id="inpFadeIn" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
+                                <span id="lblFadeInG" class="text-[#FF422E] font-bold font-mono">0s</span>
                             </label>
                             <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                         </div>
                         <div>
                             <label class="block text-sm font-bold mb-2 flex justify-between items-center">
                                 <span>Fade Out (Segundos):</span> 
-                                <span><input type="number" id="inpFadeOut" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
+                                <span id="lblFadeOutG" class="text-[#FF422E] font-bold font-mono">0s</span>
                             </label>
                             <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                         </div>
@@ -451,8 +451,8 @@
         
         const fInG = document.getElementById('fadeInGlobal');
         const fOutG = document.getElementById('fadeOutGlobal');
-        const inpFadeIn = document.getElementById('inpFadeIn');
-        const inpFadeOut = document.getElementById('inpFadeOut');
+        const lblFadeInG = document.getElementById('lblFadeInG');
+        const lblFadeOutG = document.getElementById('lblFadeOutG');
 
         const chkAdjustVol = document.getElementById('chkAdjustVol');
         const volAdjustSlider = document.getElementById('volAdjustSlider');
@@ -609,68 +609,6 @@
             checkIfStateChanged();
         });
 
-        inpFadeIn.addEventListener('input', (e) => {
-            let raw = e.target.value;
-            if (raw === '') {
-                fInG.value = 0;
-                if(wsTrim) {
-                    renderVisualFades('waveformTrimContainer', false);
-                    applyLiveAudioMath(wsTrim, false);
-                }
-                if(isEditedViewActive && wsGlobal) {
-                    renderVisualFades('waveformContainer', true);
-                    applyLiveAudioMath(wsGlobal, true);
-                }
-                checkIfStateChanged();
-                return;
-            }
-            let val = parseFloat(raw);
-            if(isNaN(val)) return;
-            if(val < 0) val = 0;
-            if(val > 10) val = 10;
-            fInG.value = val;
-            if(wsTrim) {
-                renderVisualFades('waveformTrimContainer', false);
-                applyLiveAudioMath(wsTrim, false);
-            }
-            if(isEditedViewActive && wsGlobal) {
-                renderVisualFades('waveformContainer', true);
-                applyLiveAudioMath(wsGlobal, true);
-            }
-            checkIfStateChanged();
-        });
-
-        inpFadeOut.addEventListener('input', (e) => {
-            let raw = e.target.value;
-            if (raw === '') {
-                fOutG.value = 0;
-                if(wsTrim) {
-                    renderVisualFades('waveformTrimContainer', false);
-                    applyLiveAudioMath(wsTrim, false);
-                }
-                if(isEditedViewActive && wsGlobal) {
-                    renderVisualFades('waveformContainer', true);
-                    applyLiveAudioMath(wsGlobal, true);
-                }
-                checkIfStateChanged();
-                return;
-            }
-            let val = parseFloat(raw);
-            if(isNaN(val)) return;
-            if(val < 0) val = 0;
-            if(val > 10) val = 10;
-            fOutG.value = val;
-            if(wsTrim) {
-                renderVisualFades('waveformTrimContainer', false);
-                applyLiveAudioMath(wsTrim, false);
-            }
-            if(isEditedViewActive && wsGlobal) {
-                renderVisualFades('waveformContainer', true);
-                applyLiveAudioMath(wsGlobal, true);
-            }
-            checkIfStateChanged();
-        });
-
         function renderVisualFades(containerId, isGlobalEdited) {
             const container = document.getElementById(containerId);
             const dur = videoDuration || 1;
@@ -738,7 +676,7 @@
         }
 
         fInG.addEventListener('input', () => {
-            inpFadeIn.value = fInG.value;
+            lblFadeInG.textContent = `${fInG.value}s`;
             if(wsTrim) {
                 renderVisualFades('waveformTrimContainer', false);
                 applyLiveAudioMath(wsTrim, false);
@@ -751,7 +689,7 @@
         });
 
         fOutG.addEventListener('input', () => {
-            inpFadeOut.value = fOutG.value;
+            lblFadeOutG.textContent = `${fOutG.value}s`;
             if(wsTrim) {
                 renderVisualFades('waveformTrimContainer', false);
                 applyLiveAudioMath(wsTrim, false);
@@ -1008,13 +946,11 @@
                     applyLiveAudioMath(wsTrim, false);
                     checkIfStateChanged();
 
-                    // EVENTO DE ARRASTRE DE MOUSE CON AJUSTE MAGNÉTICO (IMÁN)
                     trimRegion.on('update', () => {
                         let curStart = trimRegion.start;
                         let curEnd = trimRegion.end;
-                        const snapThreshold = 0.35; // Rango de atraccion magnetica en segundos
+                        const snapThreshold = 0.35;
 
-                        // Imán para Límite Izquierdo
                         if (Math.abs(curStart - lastAppliedState.start) < snapThreshold) {
                             curStart = lastAppliedState.start;
                             trimRegion.setOptions({ start: curStart });
@@ -1023,7 +959,6 @@
                             trimRegion.setOptions({ start: curStart });
                         }
 
-                        // Imán para Límite Derecho
                         if (Math.abs(curEnd - lastAppliedState.end) < snapThreshold) {
                             curEnd = lastAppliedState.end;
                             trimRegion.setOptions({ end: curEnd });
