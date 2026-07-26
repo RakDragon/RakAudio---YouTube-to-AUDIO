@@ -10,9 +10,17 @@
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
     <style>
-        /* Estilo general para todos los sliders (barras de llenado rojo) */
         input[type=range] {
             accent-color: #FF422E;
+            cursor: pointer;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #FF422E;
+            border-radius: 50%;
             cursor: pointer;
         }
 
@@ -33,7 +41,6 @@
             z-index: 0;
         }
 
-        /* Barra de carga sólida para el botón de procesamiento */
         #btnProcess.loading-bg::before {
             background: #FF422E; 
         }
@@ -43,7 +50,6 @@
             z-index: 1;
         }
 
-        /* Estilos personalizados para los límites de la zona de recorte */
         #waveformTrim ::part(region-handle-left),
         #waveformTrim ::part(region-handle-right) {
             width: 2px !important;
@@ -51,7 +57,6 @@
             cursor: ew-resize;
         }
 
-        /* Rectángulo central para las líneas de límite */
         #waveformTrim ::part(region-handle-left)::after,
         #waveformTrim ::part(region-handle-right)::after {
             content: '';
@@ -74,7 +79,7 @@
             transform: translate(-50%, -50%) scale(1.1);
         }
 
-        /* Teclas (kbd) estilo Imagen 1 */
+        /* Estilos base de las teclas */
         kbd {
             background-color: #1a1a1a;
             border: 1px solid #FF422E;
@@ -85,6 +90,36 @@
             box-shadow: 0 3px 0 #FF422E;
             display: inline-block;
             margin-bottom: 4px;
+            transition: all 0.1s ease; /* Transición suave para el efecto táctil */
+        }
+
+        /* Clase dinámica cuando la tecla está presionada */
+        kbd.kbd-pressed {
+            transform: translateY(3px); /* Hunde la tecla */
+            box-shadow: 0 0 0 transparent; /* Elimina la sombra inferior 3D */
+            background-color: #d43726; /* Color de fondo encendido */
+            border-color: #ff786b; /* Borde más brillante */
+            color: #ffffff;
+            text-shadow: 0 0 8px #ffffff; /* Letra brillante */
+        }
+
+        /* Estilos base del texto descriptivo para combos */
+        .desc-text {
+            display: inline-block;
+            padding: 2px 8px;
+            border: 1px solid transparent; /* Transparente por defecto para no mover el layout */
+            border-radius: 4px;
+            transition: all 0.15s ease;
+        }
+
+        /* Clase dinámica cuando el combo está activo */
+        .desc-highlight {
+            border: 1px solid #FF422E;
+            background-color: rgba(255, 66, 46, 0.15);
+            box-shadow: 0 0 10px rgba(255, 66, 46, 0.6) inset, 0 0 10px rgba(255, 66, 46, 0.4);
+            color: #ff786b;
+            text-shadow: 0 0 5px rgba(255, 66, 46, 0.8);
+            font-weight: bold;
         }
     </style>
 </head>
@@ -194,7 +229,7 @@
 
         <div id="trimModal"
             class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-            <div class="bg-[#2B2B2B] p-6 rounded-lg w-full max-w-4xl shadow-2xl border border-[#444] flex flex-col">
+            <div class="bg-[#2B2B2B] p-6 rounded-lg w-full max-w-5xl shadow-2xl border border-[#444] flex flex-col">
                 <div class="flex justify-between items-center mb-4 border-b border-[#444] pb-2">
                     <h3 class="text-xl font-bold text-white">Recorte de Audio</h3>
                     <button id="btnCloseTrim" class="text-white opacity-60 hover:opacity-100 hover:text-[#FF422E] text-2xl transition">&times;</button>
@@ -204,7 +239,6 @@
                     <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
                         <span>Inicio: <span id="lblStart" class="font-bold">0.00</span>s</span>
                         
-                        <!-- Píldora de Duración estilo Imagen 3 -->
                         <span class="bg-[#1a1a1a] text-[#FF422E] border border-[#FF422E] px-3 py-1 rounded">Duración: <span
                                 id="lblTrimDuration">0.00</span>s</span>
                                 
@@ -221,19 +255,43 @@
                         <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#444444] text-white transition-all shadow-[0_0_8px_rgba(255,255,255,0.2)]">Moviendo Cabezal (2)</span>
                     </p>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-6 text-white opacity-90 font-mono text-xs">
+                        
                         <!-- Columna 1 -->
                         <div class="space-y-4">
-                            <div><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> Foco Límite Izq / Cabezal / Der</div>
-                            <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
-                            <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
-                            <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
+                            <div>
+                                <kbd id="k-1">1</kbd> / <kbd id="k-2">2</kbd> / <kbd id="k-3">3</kbd> 
+                                <span class="desc-text" id="t-foco">Foco Límite Izq / Cabezal / Der</span>
+                            </div>
+                            <div>
+                                <kbd id="k-up">↑</kbd> / <kbd id="k-down">↓</kbd> 
+                                <span class="desc-text" id="t-vol">Subir / Bajar Volumen</span>
+                            </div>
+                            <div>
+                                <kbd id="k-shift-5">Shift</kbd> + <kbd id="k-left-5">←</kbd> / <kbd id="k-right-5">→</kbd> 
+                                <span class="desc-text" id="t-5s">Retroceder / Avanzar 5s</span>
+                            </div>
+                            <div>
+                                <kbd id="k-ctrl-ms">Ctrl</kbd> + <kbd id="k-shift-ms">Shift</kbd> + <kbd id="k-left-ms">←</kbd> / <kbd id="k-right-ms">→</kbd> 
+                                <span class="desc-text" id="t-ms">Ajuste Fino (1 milisegundo)</span>
+                            </div>
                         </div>
+                        
                         <!-- Columna 2 -->
                         <div class="space-y-4">
-                            <div><kbd>Espacio</kbd> Play / Pausa</div>
-                            <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
-                            <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
+                            <div>
+                                <kbd id="k-space">Espacio</kbd> 
+                                <span class="desc-text" id="t-play">Play / Pausa</span>
+                            </div>
+                            <div>
+                                <kbd id="k-left-10">←</kbd> / <kbd id="k-right-10">→</kbd> 
+                                <span class="desc-text" id="t-10s">Retroceder / Avanzar 10s</span>
+                            </div>
+                            <div>
+                                <kbd id="k-ctrl-1">Ctrl</kbd> + <kbd id="k-left-1">←</kbd> / <kbd id="k-right-1">→</kbd> 
+                                <span class="desc-text" id="t-1s">Retroceder / Avanzar 1s</span>
+                            </div>
                         </div>
+
                     </div>
                 </div>
 
@@ -540,17 +598,82 @@
             }
         });
 
-        document.addEventListener('keydown', (e) => {
+        // ---------------------------------------------------------
+        // EVENTOS DE ATAJOS DE TECLADO Y ANIMACIONES UI
+        // ---------------------------------------------------------
+        const keysPressed = new Set();
+
+        function updateKeyboardUI() {
+            // 1. Limpiar todos los estados presionados/resaltados
+            document.querySelectorAll('kbd').forEach(k => k.classList.remove('kbd-pressed'));
+            document.querySelectorAll('.desc-text').forEach(t => t.classList.remove('desc-highlight'));
+
+            const isModalOpen = !document.getElementById('trimModal').classList.contains('hidden');
+            if (!isModalOpen) return; // Solo animar si el modal está abierto
+
+            // Variables de estado
+            const hasShift = keysPressed.has('ShiftLeft') || keysPressed.has('ShiftRight');
+            const hasCtrl = keysPressed.has('ControlLeft') || keysPressed.has('ControlRight');
+            const hasLeft = keysPressed.has('ArrowLeft');
+            const hasRight = keysPressed.has('ArrowRight');
+
+            // Teclas individuales
+            if (keysPressed.has('Digit1')) document.getElementById('k-1')?.classList.add('kbd-pressed');
+            if (keysPressed.has('Digit2')) document.getElementById('k-2')?.classList.add('kbd-pressed');
+            if (keysPressed.has('Digit3')) document.getElementById('k-3')?.classList.add('kbd-pressed');
+            if (keysPressed.has('Space')) document.getElementById('k-space')?.classList.add('kbd-pressed');
+            if (keysPressed.has('ArrowUp')) document.getElementById('k-up')?.classList.add('kbd-pressed');
+            if (keysPressed.has('ArrowDown')) document.getElementById('k-down')?.classList.add('kbd-pressed');
+
+            // Combinaciones (Enmarcado de texto y botones)
+            if (hasLeft || hasRight) {
+                if (hasCtrl && hasShift) {
+                    document.getElementById('k-ctrl-ms')?.classList.add('kbd-pressed');
+                    document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
+                    document.getElementById(hasLeft ? 'k-left-ms' : 'k-right-ms')?.classList.add('kbd-pressed');
+                    document.getElementById('t-ms')?.classList.add('desc-highlight');
+                } else if (hasShift) {
+                    document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
+                    document.getElementById(hasLeft ? 'k-left-5' : 'k-right-5')?.classList.add('kbd-pressed');
+                    document.getElementById('t-5s')?.classList.add('desc-highlight');
+                } else if (hasCtrl) {
+                    document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
+                    document.getElementById(hasLeft ? 'k-left-1' : 'k-right-1')?.classList.add('kbd-pressed');
+                    document.getElementById('t-1s')?.classList.add('desc-highlight');
+                } else {
+                    document.getElementById(hasLeft ? 'k-left-10' : 'k-right-10')?.classList.add('kbd-pressed');
+                    document.getElementById('t-10s')?.classList.add('desc-highlight');
+                }
+            } else {
+                // Si están presionando los modificadores pero aún no las flechas
+                if (hasShift) {
+                    document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
+                    document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
+                }
+                if (hasCtrl) {
+                    document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
+                    document.getElementById('k-ctrl-ms')?.classList.add('kbd-pressed');
+                }
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
+            
+            // Registrar la tecla para la UI
+            keysPressed.add(e.code);
+            updateKeyboardUI();
 
             const isModalOpen = !document.getElementById('trimModal').classList.contains('hidden');
             const activeWs = (isModalOpen && wsTrim) ? wsTrim : wsGlobal;
             if (!activeWs) return;
 
+            // Focos
             if (isModalOpen && e.code === 'Digit1') { e.preventDefault(); setActiveMode('left'); }
             if (isModalOpen && e.code === 'Digit2') { e.preventDefault(); setActiveMode('playhead'); }
             if (isModalOpen && e.code === 'Digit3') { e.preventDefault(); setActiveMode('right'); }
 
+            // Reproductor y controles
             if (e.code === 'Space') {
                 e.preventDefault(); 
                 activeWs.playPause();
@@ -613,6 +736,18 @@
                     activeWs.setTime(newTime);
                 }
             }
+        });
+
+        // Limpiar las teclas cuando se sueltan
+        window.addEventListener('keyup', (e) => {
+            keysPressed.delete(e.code);
+            updateKeyboardUI();
+        });
+
+        // Prevenir que si el usuario cambia de pestaña con teclas oprimidas se queden pegadas visualmente
+        window.addEventListener('blur', () => {
+            keysPressed.clear();
+            updateKeyboardUI();
         });
 
         btnProcess.addEventListener('click', async () => {
