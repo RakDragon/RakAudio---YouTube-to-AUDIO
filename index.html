@@ -107,6 +107,12 @@
             transform: translate(-50%, -50%) scale(1.1);
         }
 
+        /* EL CABEZAL / CURSOR DE WAVESURFER SIEMPRE POR ENCIMA DE LOS FADES */
+        #waveform ::part(cursor),
+        #waveformTrim ::part(cursor) {
+            z-index: 30 !important;
+        }
+
         #waveformTrim ::part(region)::before {
             content: '';
             position: absolute;
@@ -114,7 +120,7 @@
             width: var(--fade-in-width, 0%);
             background: linear-gradient(to right, rgba(26,26,26,0.9), transparent);
             pointer-events: none;
-            z-index: -2;
+            z-index: 1;
         }
         #waveformTrim ::part(region)::after {
             content: '';
@@ -123,7 +129,7 @@
             width: var(--fade-out-width, 0%);
             background: linear-gradient(to left, rgba(26,26,26,0.9), transparent);
             pointer-events: none;
-            z-index: -2;
+            z-index: 1;
         }
 
         kbd {
@@ -323,7 +329,7 @@
                                 <div><kbd id="k-1">1</kbd> / <kbd id="k-2">2</kbd> / <kbd id="k-3">3</kbd> <span class="desc-text" id="t-foco">Foco Límite Izq / Cabezal / Der</span></div>
                                 <div><kbd id="k-up">↑</kbd> / <kbd id="k-down">↓</kbd> <span class="desc-text" id="t-vol">Subir / Bajar Volumen</span></div>
                                 <div><kbd id="k-shift-5">Shift</kbd> + <kbd id="k-left-5">←</kbd> / <kbd id="k-right-5">→</kbd> <span class="desc-text" id="t-5s">Retroceder / Avanzar 5s</span></div>
-                                <div><kbd id="k-ctrl-ms">Ctrl</kbd> + <kbd id="k-shift-ms">Shift</kbd> + <kbd id="k-left-ms">←</kbd> / <kbd id="k-right-ms">→</kbd> <span class="desc-text" id="t-ms">Ajuste Fino (1 ms)</span></div>
+                                <div><kbd id="k-ctrl-ms">Ctrl</kbd> + <kbd id="k-shift-ms">Shift</kbd> + <kbd id="k-left-ms">←</kbd> / <kbd id="k-right-ms">→</kbd> <span class="desc-text" id="t-ms">Ajuste Fino (0.01s)</span></div>
                             </div>
                             <div class="space-y-4">
                                 <div><kbd id="k-space">Espacio</kbd> <span class="desc-text" id="t-play">Play / Pausa</span></div>
@@ -487,7 +493,6 @@
             if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
-        // CORRECCIÓN: Sincronización completa al editar Inicio
         inpStart.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val < 0) val = 0;
@@ -505,7 +510,6 @@
             if (wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
-        // CORRECCIÓN: Sincronización completa al editar Fin
         inpEnd.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val > videoDuration) val = videoDuration;
@@ -921,6 +925,7 @@
 
         const keysPressed = new Set();
 
+        // RESTRUCTURACIÓN DEL RESALTADO DE Shift Y Ctrl
         function updateKeyboardUI() {
             document.querySelectorAll('kbd').forEach(k => k.classList.remove('kbd-pressed'));
             document.querySelectorAll('.desc-text').forEach(t => t.classList.remove('desc-highlight'));
@@ -959,13 +964,14 @@
                     document.getElementById('t-10s')?.classList.add('desc-highlight');
                 }
             } else {
-                if (hasShift) {
-                    document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
-                    document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
-                }
-                if (hasCtrl) {
-                    document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
+                // Al mantener modificadores sin oprimir flechas: aislamos Ctrl+Shift
+                if (hasCtrl && hasShift) {
                     document.getElementById('k-ctrl-ms')?.classList.add('kbd-pressed');
+                    document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
+                } else if (hasShift) {
+                    document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
+                } else if (hasCtrl) {
+                    document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
                 }
             }
         }
@@ -1029,7 +1035,8 @@
                 const direction = e.code === 'ArrowRight' ? 1 : -1;
                 
                 let step = 10; 
-                if (e.ctrlKey && e.shiftKey) step = 0.001;
+                // CAMBIO CLAVE: Paso de 0.01 (10ms) para alterar directamente el 2do dígito decimal (.XX)
+                if (e.ctrlKey && e.shiftKey) step = 0.01;
                 else if (e.shiftKey) step = 5;             
                 else if (e.ctrlKey) step = 1;              
 
