@@ -55,6 +55,7 @@
             width: 2px !important;
             background-color: #FF422E !important;
             cursor: ew-resize;
+            z-index: 10 !important;
         }
 
         #waveformTrim ::part(region-handle-left)::after,
@@ -70,6 +71,7 @@
             border-radius: 3px;
             box-shadow: 0 0 5px rgba(0,0,0,0.6);
             transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
+            z-index: 10 !important;
         }
 
         #waveformTrim ::part(region-handle-left):hover::after,
@@ -77,6 +79,25 @@
             background-color: #ff6454;
             box-shadow: 0 0 8px rgba(255, 66, 46, 0.8);
             transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        #waveformTrim ::part(region)::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: var(--fade-in-width, 0%);
+            background: linear-gradient(to right, rgba(26,26,26,0.9), transparent);
+            pointer-events: none;
+            z-index: 1;
+        }
+        #waveformTrim ::part(region)::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0;
+            width: var(--fade-out-width, 0%);
+            background: linear-gradient(to left, rgba(26,26,26,0.9), transparent);
+            pointer-events: none;
+            z-index: 1;
         }
 
         kbd {
@@ -118,12 +139,11 @@
             font-weight: bold;
         }
 
-        /* Estilo para las capas de Fade superpuestas */
         .fade-overlay {
             position: absolute;
             top: 0;
             bottom: 0;
-            z-index: 10;
+            z-index: 5;
             pointer-events: none;
         }
         
@@ -139,7 +159,7 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            z-index: 10;
+            z-index: 5;
             pointer-events: none;
             background-color: rgba(31,31,31,0.85);
         }
@@ -179,14 +199,12 @@
             <div class="flex justify-between items-center mb-4 border-b border-[#444] pb-2">
                 <h3 class="text-lg font-bold text-white">Previsualización y Ajustes Globales</h3>
                 
-                <!-- Toggle Original / Editado (Oculto inicialmente) -->
                 <div id="viewToggle" class="hidden bg-[#1f1f1f] p-1 rounded-full border border-[#444] flex text-xs font-bold shadow-inner">
                     <button id="btnViewOriginal" class="px-3 py-1 rounded-full bg-[#FF422E] text-white transition">Original</button>
                     <button id="btnViewEdited" class="px-3 py-1 rounded-full text-gray-400 hover:text-white transition">Editado</button>
                 </div>
             </div>
 
-            <!-- Contenedor relativo para poder inyectar las capas oscuras / difuminados -->
             <div id="waveformContainer" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-24 relative overflow-hidden">
                 <div id="waveform" class="w-full h-full"></div>
             </div>
@@ -213,7 +231,8 @@
                 </div>
                 <div class="flex items-center gap-2 w-full md:w-auto text-white">
                     <span class="text-sm">Vol:</span>
-                    <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" class="w-24">
+                    <input type="range" id="volSlider" min="0" max="2" step="0.05" value="1" class="w-24">
+                    <span id="lblVolGlobal" class="font-mono text-xs w-8 text-right opacity-80">100%</span>
                 </div>
             </div>
 
@@ -251,15 +270,12 @@
                     <button id="btnCloseTrim" class="text-white opacity-60 hover:opacity-100 hover:text-[#FF422E] text-3xl transition ml-auto">&times;</button>
                 </div>
 
-                <!-- SECCIÓN 1: RECORTE -->
                 <div class="mb-6 bg-[#222222] p-4 rounded border border-[#333]">
                     <h4 class="font-bold text-[#FF422E] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Recorte de Audio</h4>
                     
                     <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
                         <span>Inicio: <span id="lblStart" class="font-bold text-[#FF422E]">0.00</span>s</span>
-                        
                         <span class="bg-[#1a1a1a] text-[#FF422E] border border-[#FF422E] px-3 py-1 rounded">Duración: <span id="lblTrimDuration">0.00</span>s</span>
-                                
                         <span>Fin: <span id="lblEnd" class="font-bold text-[#FF422E]">0.00</span>s</span>
                     </div>
 
@@ -288,7 +304,6 @@
                     </div>
                 </div>
 
-                <!-- SECCIÓN 2: FADES -->
                 <div class="mb-4 bg-[#222222] p-4 rounded border border-[#333] text-white">
                     <h4 class="font-bold text-[#FFFFFF] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Controles de Fade</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -307,14 +322,13 @@
                     </div>
                 </div>
 
-                <!-- FOOTER MODAL -->
                 <div class="flex justify-between items-center mt-2 border-t border-[#444] pt-4">
                     <div class="flex items-center gap-3 bg-[#1f1f1f] px-4 py-2 rounded border border-[#444]">
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" id="chkAdjustVol" class="w-4 h-4 accent-[#FF422E]">
                             <span class="text-white text-sm font-bold">Ajustar volumen</span>
                         </label>
-                        <input type="range" id="volAdjustSlider" min="0" max="2" step="0.1" value="1" class="w-24 opacity-50 pointer-events-none" disabled>
+                        <input type="range" id="volAdjustSlider" min="0" max="2" step="0.05" value="1" class="w-24 opacity-50 pointer-events-none" disabled>
                         <span id="lblVolAdjust" class="text-white font-mono text-xs opacity-50 w-8 text-right">100%</span>
                     </div>
 
@@ -353,7 +367,9 @@
         let currentEvtSource = null;
         
         let activeMode = 'playhead';
-        let isEditedViewActive = false; // Estado del toggle global
+        let isEditedViewActive = false;
+        
+        let globalVolValue = 1.0;
 
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
@@ -375,16 +391,15 @@
         const lFInG = document.getElementById('lblFadeInG');
         const lFOutG = document.getElementById('lblFadeOutG');
 
-        // Checkbox y slider de volumen edición
         const chkAdjustVol = document.getElementById('chkAdjustVol');
         const volAdjustSlider = document.getElementById('volAdjustSlider');
         const lblVolAdjust = document.getElementById('lblVolAdjust');
         
-        // Elementos Toggle Vista Global
         const viewToggle = document.getElementById('viewToggle');
         const btnViewOriginal = document.getElementById('btnViewOriginal');
         const btnViewEdited = document.getElementById('btnViewEdited');
         const volSlider = document.getElementById('volSlider');
+        const lblVolGlobal = document.getElementById('lblVolGlobal');
 
         const hoverOptions = {
             lineColor: '#FF422E',
@@ -393,6 +408,35 @@
             labelColor: '#fff',
             labelSize: '11px',
         };
+
+        function applyLiveAudioMath(ws, isGlobalEdited) {
+            let currentTime = ws.getCurrentTime();
+            let start = isGlobalEdited ? trimStartTime : (ws === wsTrim ? trimStartTime : 0);
+            let end = isGlobalEdited ? trimEndTime : (ws === wsTrim ? trimEndTime : videoDuration);
+            let t = currentTime - start;
+            
+            let inSec = parseFloat(fInG.value);
+            let outSec = parseFloat(fOutG.value);
+            
+            let maxVol;
+            if (ws === wsTrim || isGlobalEdited) {
+                maxVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
+            } else {
+                maxVol = globalVolValue;
+            }
+
+            let currentVol = maxVol;
+
+            if (inSec > 0 && t < inSec && t >= 0) {
+                currentVol = maxVol * (t / inSec);
+            } else if (outSec > 0 && currentTime > (end - outSec) && currentTime <= end) {
+                let timeLeft = end - currentTime;
+                currentVol = maxVol * (timeLeft / outSec);
+            }
+
+            currentVol = Math.max(0, Math.min(maxVol, currentVol));
+            ws.setVolume(currentVol);
+        }
 
         chkAdjustVol.addEventListener('change', (e) => {
             volAdjustSlider.disabled = !e.target.checked;
@@ -403,23 +447,24 @@
                 volAdjustSlider.classList.add('opacity-50', 'pointer-events-none');
                 lblVolAdjust.classList.add('opacity-50');
             }
+            if(wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
         volAdjustSlider.addEventListener('input', (e) => {
             lblVolAdjust.textContent = `${Math.round(e.target.value * 100)}%`;
+            if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
-        // Función para renderizar los Fades y áreas oscuras en un contenedor
         function renderVisualFades(containerId, isGlobalEdited) {
             const container = document.getElementById(containerId);
-            container.querySelectorAll('.visual-fx').forEach(el => el.remove());
-            
             const dur = videoDuration || 1;
             const startP = (trimStartTime / dur) * 100;
             const endP = (trimEndTime / dur) * 100;
+            const inSec = parseFloat(fInG.value);
+            const outSec = parseFloat(fOutG.value);
 
-            // Si es vista global editada, oscurecer lo que no es recorte
             if (isGlobalEdited) {
+                container.querySelectorAll('.visual-fx').forEach(el => el.remove());
                 const bLeft = document.createElement('div');
                 bLeft.className = 'visual-fx blackout-overlay';
                 bLeft.style.width = `${startP}%`;
@@ -432,39 +477,55 @@
                 
                 container.appendChild(bLeft);
                 container.appendChild(bRight);
-            }
 
-            const inSec = parseFloat(fInG.value);
-            const outSec = parseFloat(fOutG.value);
+                if (inSec > 0) {
+                    const fInDiv = document.createElement('div');
+                    fInDiv.className = 'visual-fx fade-overlay fade-in-gradient';
+                    fInDiv.style.left = `${startP}%`;
+                    fInDiv.style.width = `${(inSec / dur) * 100}%`;
+                    container.appendChild(fInDiv);
+                }
 
-            if (inSec > 0) {
-                const fInDiv = document.createElement('div');
-                fInDiv.className = 'visual-fx fade-overlay fade-in-gradient';
-                fInDiv.style.left = `${startP}%`;
-                fInDiv.style.width = `${(inSec / dur) * 100}%`;
-                container.appendChild(fInDiv);
-            }
-
-            if (outSec > 0) {
-                const fOutDiv = document.createElement('div');
-                fOutDiv.className = 'visual-fx fade-overlay fade-out-gradient';
-                // Posicionar justo antes del End
-                fOutDiv.style.left = `${((trimEndTime - outSec) / dur) * 100}%`;
-                fOutDiv.style.width = `${(outSec / dur) * 100}%`;
-                container.appendChild(fOutDiv);
+                if (outSec > 0) {
+                    const fOutDiv = document.createElement('div');
+                    fOutDiv.className = 'visual-fx fade-overlay fade-out-gradient';
+                    fOutDiv.style.left = `${((trimEndTime - outSec) / dur) * 100}%`;
+                    fOutDiv.style.width = `${(outSec / dur) * 100}%`;
+                    container.appendChild(fOutDiv);
+                }
+            } else {
+                const regionDur = (trimEndTime - trimStartTime) || 1;
+                const inPerc = Math.min(100, (inSec / regionDur) * 100);
+                const outPerc = Math.min(100, (outSec / regionDur) * 100);
+                document.getElementById('waveformTrim').style.setProperty('--fade-in-width', `${inPerc}%`);
+                document.getElementById('waveformTrim').style.setProperty('--fade-out-width', `${outPerc}%`);
             }
         }
 
         fInG.addEventListener('input', () => {
             lFInG.textContent = `${fInG.value}s`;
-            renderVisualFades('waveformTrimContainer', false);
-        });
-        fOutG.addEventListener('input', () => {
-            lFOutG.textContent = `${fOutG.value}s`;
-            renderVisualFades('waveformTrimContainer', false);
+            if(wsTrim) {
+                renderVisualFades('waveformTrimContainer', false);
+                applyLiveAudioMath(wsTrim, false);
+            }
+            if(isEditedViewActive && wsGlobal) {
+                renderVisualFades('waveformContainer', true);
+                applyLiveAudioMath(wsGlobal, true);
+            }
         });
 
-        // Lógica del Toggle Original / Editado
+        fOutG.addEventListener('input', () => {
+            lFOutG.textContent = `${fOutG.value}s`;
+            if(wsTrim) {
+                renderVisualFades('waveformTrimContainer', false);
+                applyLiveAudioMath(wsTrim, false);
+            }
+            if(isEditedViewActive && wsGlobal) {
+                renderVisualFades('waveformContainer', true);
+                applyLiveAudioMath(wsGlobal, true);
+            }
+        });
+
         function setGlobalView(edited) {
             isEditedViewActive = edited;
             if(edited) {
@@ -476,8 +537,12 @@
                 volSlider.disabled = true;
                 volSlider.classList.add('opacity-50', 'cursor-not-allowed');
                 
+                const editVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
+                volSlider.value = editVol;
+                lblVolGlobal.textContent = `${Math.round(editVol * 100)}%`;
+                
                 renderVisualFades('waveformContainer', true);
-                wsGlobal.setTime(trimStartTime);
+                if (wsGlobal) wsGlobal.setTime(trimStartTime);
             } else {
                 btnViewOriginal.classList.replace('text-gray-400', 'text-white');
                 btnViewOriginal.classList.replace('hover:text-white', 'bg-[#FF422E]');
@@ -487,7 +552,10 @@
                 volSlider.disabled = false;
                 volSlider.classList.remove('opacity-50', 'cursor-not-allowed');
                 
-                // Limpiar FX
+                volSlider.value = globalVolValue;
+                lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
+                if (wsGlobal) wsGlobal.setVolume(globalVolValue);
+                
                 document.getElementById('waveformContainer').querySelectorAll('.visual-fx').forEach(el => el.remove());
             }
         }
@@ -525,7 +593,7 @@
         const showStatus = (msg, isError = false) => {
             statusMsg.textContent = msg;
             statusMsg.classList.remove('hidden');
-            statusMsg.className = `text-sm mt-2 block z-10 font-mono text-white ${isError ? 'font-bold' : ''}`;
+            statusMsg.className = `text-sm mt-2 block z-10 font-mono text-white ${isError ? 'font-bold text-[#FF422E]' : ''}`;
         };
 
         const formatTime = (seconds) => {
@@ -555,21 +623,27 @@
             wsGlobal.on('ready', () => {
                 lblTotalTime.textContent = formatTime(wsGlobal.getDuration());
                 lblCurrentTime.textContent = formatTime(0);
+                wsGlobal.setVolume(globalVolValue);
             });
             wsGlobal.on('audioprocess', () => {
                 lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
-                // Si está en modo Editado, restringir reproducción al final del recorte
-                if(isEditedViewActive && wsGlobal.getCurrentTime() >= trimEndTime) {
-                    wsGlobal.pause();
-                    wsGlobal.setTime(trimStartTime);
+                if(isEditedViewActive) {
+                    if(wsGlobal.getCurrentTime() >= trimEndTime) {
+                        wsGlobal.pause();
+                        wsGlobal.setTime(trimStartTime);
+                    } else {
+                        applyLiveAudioMath(wsGlobal, true);
+                    }
+                } else {
+                    wsGlobal.setVolume(globalVolValue);
                 }
             });
             wsGlobal.on('interaction', () => {
-                // Si está en modo Editado y hacen clic fuera, traer al inicio del recorte
                 if(isEditedViewActive) {
                     if (wsGlobal.getCurrentTime() < trimStartTime || wsGlobal.getCurrentTime() > trimEndTime) {
                         wsGlobal.setTime(trimStartTime);
                     }
+                    applyLiveAudioMath(wsGlobal, true);
                 }
                 lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
             });
@@ -588,7 +662,11 @@
         document.getElementById('btnPlus10').addEventListener('click', () => wsGlobal.skip(10));
 
         volSlider.addEventListener('input', (e) => {
-            if(!isEditedViewActive && wsGlobal) wsGlobal.setVolume(Number(e.target.value));
+            if(!isEditedViewActive) {
+                globalVolValue = Number(e.target.value);
+                lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
+                if(wsGlobal) wsGlobal.setVolume(globalVolValue);
+            }
         });
 
         document.getElementById('btnExtraer').addEventListener('click', async () => {
@@ -597,11 +675,11 @@
 
             if (currentEvtSource) currentEvtSource.close();
             viewToggle.classList.add('hidden');
-            setGlobalView(false); // Reset al extraer nuevo
+            setGlobalView(false); 
 
             if (wsTrim) { wsTrim.destroy(); wsTrim = null; }
 
-            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            currentEvtSource = new EventSource(`http://127.0.0.1:5000/api/progress?client_id=${clientId}`);
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 extractContainer.style.setProperty('--progress', `${data.progress}%`);
@@ -610,7 +688,7 @@
             };
 
             try {
-                const res = await fetch('http://localhost:5000/api/extract', {
+                const res = await fetch('http://127.0.0.1:5000/api/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: url, client_id: clientId })
@@ -645,7 +723,8 @@
             } catch (err) {
                 if (currentEvtSource) currentEvtSource.close();
                 extractContainer.style.setProperty('--progress', '0%');
-                showStatus(`Error: ${err.message}`, true);
+                showStatus(`Error de conexión con el servidor Python.`, true);
+                console.error(err);
             }
         });
 
@@ -653,7 +732,7 @@
             document.getElementById('trimModal').classList.remove('hidden');
             setActiveMode('playhead'); 
             
-            if (wsGlobal.isPlaying()) wsGlobal.pause();
+            if (wsGlobal && wsGlobal.isPlaying()) wsGlobal.pause();
 
             if (!wsTrim) {
                 const wsRegions = WaveSurfer.Regions.create();
@@ -665,12 +744,11 @@
                     height: 128,
                     url: audioUrlGlobal,
                     dragToSeek: true,
-                    plugins: [wsRegions, WaveSurfer.Hover.create(hoverOptions)]
+                    plugins: [
+                        wsRegions,
+                        WaveSurfer.Hover.create(hoverOptions)
+                    ]
                 });
-
-                // Si ajustaron volumen previamente
-                const v = chkAdjustVol.checked ? Number(volAdjustSlider.value) : Number(volSlider.value);
-                wsTrim.setVolume(v);
 
                 wsTrim.on('decode', () => {
                     trimRegion = wsRegions.addRegion({
@@ -686,6 +764,7 @@
                     lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                     
                     renderVisualFades('waveformTrimContainer', false);
+                    applyLiveAudioMath(wsTrim, false);
 
                     trimRegion.on('update', () => {
                         if (trimRegion.start !== trimStartTime && trimRegion.end === trimEndTime) {
@@ -701,6 +780,7 @@
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         
                         renderVisualFades('waveformTrimContainer', false);
+                        applyLiveAudioMath(wsTrim, false);
                     });
                 });
 
@@ -709,17 +789,22 @@
                     if (wsTrim.getCurrentTime() < trimStartTime || wsTrim.getCurrentTime() > trimEndTime) {
                         wsTrim.setTime(trimStartTime);
                     }
+                    applyLiveAudioMath(wsTrim, false);
                 });
 
                 wsTrim.on('audioprocess', () => {
                     if (wsTrim.getCurrentTime() >= trimEndTime) {
                         wsTrim.pause();
                         wsTrim.setTime(trimStartTime);
+                    } else {
+                        applyLiveAudioMath(wsTrim, false);
                     }
                 });
 
                 wsTrim.on('play', () => document.getElementById('playIconTrim').textContent = '❚❚');
                 wsTrim.on('pause', () => document.getElementById('playIconTrim').textContent = '►');
+            } else {
+                applyLiveAudioMath(wsTrim, false);
             }
         });
 
@@ -732,7 +817,6 @@
             if (wsTrim && wsTrim.isPlaying()) wsTrim.pause();
             document.getElementById('trimModal').classList.add('hidden');
             
-            // Mostrar toggle y forzar vista Editada
             viewToggle.classList.remove('hidden');
             setGlobalView(true);
         });
@@ -748,9 +832,6 @@
             }
         });
 
-        // ---------------------------------------------------------
-        // EVENTOS DE ATAJOS DE TECLADO Y ANIMACIONES UI
-        // ---------------------------------------------------------
         const keysPressed = new Set();
 
         function updateKeyboardUI() {
@@ -822,19 +903,39 @@
             } 
             else if (e.code === 'ArrowUp') {
                 e.preventDefault();
-                let v = Math.min(1, activeWs.getVolume() + 0.05);
-                if(!isEditedViewActive && wsGlobal) wsGlobal.setVolume(v);
-                if(wsTrim) wsTrim.setVolume(v);
-                if(isModalOpen && chkAdjustVol.checked) volAdjustSlider.value = v;
-                else volSlider.value = v;
+                if(isModalOpen) {
+                    if(!chkAdjustVol.checked) chkAdjustVol.click();
+                    let v = Math.min(2, parseFloat(volAdjustSlider.value) + 0.05);
+                    volAdjustSlider.value = v;
+                    lblVolAdjust.textContent = `${Math.round(v * 100)}%`;
+                    applyLiveAudioMath(wsTrim, false);
+                } else {
+                    if(!isEditedViewActive) {
+                        let v = Math.min(2, globalVolValue + 0.05);
+                        globalVolValue = v;
+                        volSlider.value = v;
+                        lblVolGlobal.textContent = `${Math.round(v * 100)}%`;
+                        wsGlobal.setVolume(v);
+                    }
+                }
             } 
             else if (e.code === 'ArrowDown') {
                 e.preventDefault();
-                let v = Math.max(0, activeWs.getVolume() - 0.05);
-                if(!isEditedViewActive && wsGlobal) wsGlobal.setVolume(v);
-                if(wsTrim) wsTrim.setVolume(v);
-                if(isModalOpen && chkAdjustVol.checked) volAdjustSlider.value = v;
-                else volSlider.value = v;
+                if(isModalOpen) {
+                    if(!chkAdjustVol.checked) chkAdjustVol.click();
+                    let v = Math.max(0, parseFloat(volAdjustSlider.value) - 0.05);
+                    volAdjustSlider.value = v;
+                    lblVolAdjust.textContent = `${Math.round(v * 100)}%`;
+                    applyLiveAudioMath(wsTrim, false);
+                } else {
+                    if(!isEditedViewActive) {
+                        let v = Math.max(0, globalVolValue - 0.05);
+                        globalVolValue = v;
+                        volSlider.value = v;
+                        lblVolGlobal.textContent = `${Math.round(v * 100)}%`;
+                        wsGlobal.setVolume(v);
+                    }
+                }
             } 
             else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
                 e.preventDefault();
@@ -856,6 +957,7 @@
                         lblStart.textContent = trimStartTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
+                        applyLiveAudioMath(wsTrim, false);
                     } 
                     else if (activeMode === 'right' && trimRegion) {
                         let newEnd = trimEndTime + (step * direction);
@@ -867,12 +969,14 @@
                         lblEnd.textContent = trimEndTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
+                        applyLiveAudioMath(wsTrim, false);
                     } 
                     else {
                         let newTime = activeWs.getCurrentTime() + (step * direction);
                         if (newTime < trimStartTime) newTime = trimStartTime;
                         if (newTime > trimEndTime) newTime = trimEndTime;
                         activeWs.setTime(newTime);
+                        applyLiveAudioMath(wsTrim, false);
                     }
                 } 
                 else {
@@ -885,6 +989,7 @@
                         if (newTime > videoDuration) newTime = videoDuration;
                     }
                     activeWs.setTime(newTime);
+                    if(isEditedViewActive) applyLiveAudioMath(wsGlobal, true);
                 }
             }
         });
@@ -909,7 +1014,7 @@
             btnProcess.classList.add('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
 
             if (currentEvtSource) currentEvtSource.close();
-            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
+            currentEvtSource = new EventSource(`http://127.0.0.1:5000/api/progress?client_id=${clientId}`);
 
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
@@ -928,7 +1033,7 @@
             };
 
             try {
-                const res = await fetch('http://localhost:5000/api/process', {
+                const res = await fetch('http://127.0.0.1:5000/api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -969,7 +1074,8 @@
 
             } catch (err) {
                 if (currentEvtSource) currentEvtSource.close();
-                spanText.textContent = `Error: ${err.message}`;
+                spanText.textContent = `Error de conexión con el servidor Python.`;
+                console.error(err);
                 setTimeout(() => {
                     btnProcess.disabled = false;
                     btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
