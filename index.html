@@ -60,12 +60,13 @@
             z-index: 1;
         }
 
-        /* LÍNEA NEGRA REAL DE RECORTE (|) */
+        /* LÍNEA NEGRA REAL DE CORTE (|) */
         #waveformTrim ::part(region) {
             border-left: 2px solid #000000 !important;
             border-right: 2px solid #000000 !important;
             box-sizing: border-box !important;
-            z-index: 10 !important;
+            overflow: visible !important;
+            z-index: 20 !important;
         }
 
         /* MANIJA Y LÍNEA ROJA DECORATIVA (I) */
@@ -74,19 +75,15 @@
             width: 2px !important;
             background-color: #FF422E !important;
             cursor: ew-resize;
-            z-index: 5 !important;
+            z-index: 10 !important;
         }
 
-        /* POSICIONAMIENTO HACIA AFUERA: LÍMITE IZQUIERDO (I|) */
         #waveformTrim ::part(region-handle-left) {
-            left: 0 !important;
-            transform: translateX(-100%);
+            left: -6px !important;
         }
 
-        /* POSICIONAMIENTO HACIA AFUERA: LÍMITE DERECHO (|I) */
         #waveformTrim ::part(region-handle-right) {
-            right: 0 !important;
-            transform: translateX(100%);
+            right: -6px !important;
         }
 
         #waveformTrim ::part(region-handle-left)::after,
@@ -312,7 +309,7 @@
                         </span>
                     </div>
 
-                    <div id="waveformTrimContainer" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-32 relative overflow-hidden mb-4">
+                    <div id="waveformTrimContainer" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-32 relative mb-4">
                         <div id="waveformTrim" class="w-full h-full"></div>
                     </div>
 
@@ -490,20 +487,40 @@
             if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
+        // CORRECCIÓN: Sincronización completa al editar Inicio
         inpStart.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val < 0) val = 0;
             if(val >= trimEndTime - 0.01) val = trimEndTime - 0.01;
-            e.target.value = val.toFixed(2);
-            if (trimRegion) trimRegion.setOptions({ start: val });
+            
+            trimStartTime = val;
+            e.target.value = trimStartTime.toFixed(2);
+            
+            if (trimRegion) {
+                trimRegion.setOptions({ start: trimStartTime });
+            }
+            
+            lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+            renderVisualFades('waveformTrimContainer', false);
+            if (wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
+        // CORRECCIÓN: Sincronización completa al editar Fin
         inpEnd.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val > videoDuration) val = videoDuration;
             if(val <= trimStartTime + 0.01) val = trimStartTime + 0.01;
-            e.target.value = val.toFixed(2);
-            if (trimRegion) trimRegion.setOptions({ end: val });
+            
+            trimEndTime = val;
+            e.target.value = trimEndTime.toFixed(2);
+            
+            if (trimRegion) {
+                trimRegion.setOptions({ end: trimEndTime });
+            }
+            
+            lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+            renderVisualFades('waveformTrimContainer', false);
+            if (wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
         inpFadeIn.addEventListener('input', (e) => {
