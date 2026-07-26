@@ -24,7 +24,6 @@
             cursor: pointer;
         }
 
-        /* Inputs numéricos sin flechas nativas para diseño más limpio */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { 
             -webkit-appearance: none; 
@@ -32,6 +31,7 @@
         }
         input[type=number] {
             -moz-appearance: textfield;
+            appearance: textfield;
         }
 
         .loading-bg {
@@ -60,19 +60,33 @@
             z-index: 1;
         }
 
-        /* Z-INDEX DE LOS BORDES DE RECORTE (LÍNEA NEGRA POR DELANTE) */
+        /* LÍNEA NEGRA REAL DE RECORTE (|) */
         #waveformTrim ::part(region) {
-            border-left: 2px solid #000 !important;
-            border-right: 2px solid #000 !important;
-            z-index: 5 !important;
+            border-left: 2px solid #000000 !important;
+            border-right: 2px solid #000000 !important;
+            box-sizing: border-box !important;
+            z-index: 10 !important;
         }
 
+        /* MANIJA Y LÍNEA ROJA DECORATIVA (I) */
         #waveformTrim ::part(region-handle-left),
         #waveformTrim ::part(region-handle-right) {
             width: 2px !important;
             background-color: #FF422E !important;
             cursor: ew-resize;
-            z-index: -1 !important; /* Manda la línea roja DETRÁS del borde negro */
+            z-index: 5 !important;
+        }
+
+        /* POSICIONAMIENTO HACIA AFUERA: LÍMITE IZQUIERDO (I|) */
+        #waveformTrim ::part(region-handle-left) {
+            left: 0 !important;
+            transform: translateX(-100%);
+        }
+
+        /* POSICIONAMIENTO HACIA AFUERA: LÍMITE DERECHO (|I) */
+        #waveformTrim ::part(region-handle-right) {
+            right: 0 !important;
+            transform: translateX(100%);
         }
 
         #waveformTrim ::part(region-handle-left)::after,
@@ -88,7 +102,6 @@
             border-radius: 3px;
             box-shadow: 0 0 5px rgba(0,0,0,0.8);
             transition: background-color 0.2s, transform 0.2s;
-            z-index: -1 !important; /* Cápsula roja por detrás */
         }
 
         #waveformTrim ::part(region-handle-left):hover::after,
@@ -245,7 +258,6 @@
                     <button id="btnEnd"
                         class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded font-bold text-white transition">&gt;&gt;</button>
                 </div>
-                <!-- VOLUMEN GLOBAL LÍMITE 100% -->
                 <div class="flex items-center gap-2 w-full md:w-auto text-white">
                     <span class="text-sm">Vol:</span>
                     <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" class="w-24">
@@ -291,7 +303,6 @@
                     <h4 class="font-bold text-[#FF422E] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Recorte de Audio</h4>
                     
                     <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
-                        <!-- INPUTS EDITABLES: INICIO Y FIN -->
                         <span>Inicio: 
                             <input type="number" id="inpStart" class="bg-transparent font-bold text-[#FF422E] w-16 text-center border-b border-gray-600 focus:outline-none focus:border-[#FF422E]" step="0.01" min="0" value="0.00">s
                         </span>
@@ -330,7 +341,6 @@
                     <h4 class="font-bold text-[#FFFFFF] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Controles de Fade</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <!-- INPUT EDITABLE: FADE IN -->
                             <label class="block text-sm font-bold mb-2 flex justify-between items-center">
                                 <span>Fade In (Segundos):</span> 
                                 <span><input type="number" id="inpFadeIn" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
@@ -338,7 +348,6 @@
                             <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                         </div>
                         <div>
-                            <!-- INPUT EDITABLE: FADE OUT -->
                             <label class="block text-sm font-bold mb-2 flex justify-between items-center">
                                 <span>Fade Out (Segundos):</span> 
                                 <span><input type="number" id="inpFadeOut" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
@@ -481,7 +490,6 @@
             if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
-        // Sincronización de Inputs Editables con la Región
         inpStart.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val < 0) val = 0;
@@ -498,7 +506,6 @@
             if (trimRegion) trimRegion.setOptions({ end: val });
         });
 
-        // Sincronización de Inputs Editables de Fade
         inpFadeIn.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             if(val < 0) val = 0;
@@ -597,9 +604,7 @@
                 volSlider.disabled = true;
                 volSlider.classList.add('opacity-50', 'cursor-not-allowed');
                 
-                // Muestra el volumen alterado por la edición (hasta 200%)
                 const editVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
-                // Temporarily allow slider visually to show >1 just for UI reflection, though locked.
                 volSlider.max = "2"; 
                 volSlider.value = editVol;
                 lblVolGlobal.textContent = `${Math.round(editVol * 100)}%`;
@@ -615,7 +620,6 @@
                 volSlider.disabled = false;
                 volSlider.classList.remove('opacity-50', 'cursor-not-allowed');
                 
-                // Restaura al 100% límite
                 volSlider.max = "1";
                 volSlider.value = globalVolValue;
                 lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
@@ -744,7 +748,6 @@
 
             if (wsTrim) { wsTrim.destroy(); wsTrim = null; }
 
-            // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
             currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
@@ -754,7 +757,6 @@
             };
 
             try {
-                // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
                 const res = await fetch('http://localhost:5000/api/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1082,7 +1084,6 @@
             btnProcess.classList.add('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
 
             if (currentEvtSource) currentEvtSource.close();
-            // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
             currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
 
             currentEvtSource.onmessage = (e) => {
@@ -1102,7 +1103,6 @@
             };
 
             try {
-                // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
                 const res = await fetch('http://localhost:5000/api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
