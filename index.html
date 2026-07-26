@@ -66,7 +66,7 @@
             border-right: 2px solid #000000 !important;
             box-sizing: border-box !important;
             overflow: visible !important;
-            z-index: 20 !important;
+            z-index: 25 !important;
         }
 
         /* MANIJA Y LÍNEA ROJA DECORATIVA (I) */
@@ -75,7 +75,7 @@
             width: 2px !important;
             background-color: #FF422E !important;
             cursor: ew-resize;
-            z-index: 10 !important;
+            z-index: 30 !important;
         }
 
         #waveformTrim ::part(region-handle-left) {
@@ -86,7 +86,6 @@
             right: -6px !important;
         }
 
-        /* CÁPSULA ROJA DE AGARRE CON Z-INDEX 35 (POR ENCIMA DEL CABEZAL BLANCO) */
         #waveformTrim ::part(region-handle-left)::after,
         #waveformTrim ::part(region-handle-right)::after {
             content: '';
@@ -100,7 +99,7 @@
             border-radius: 3px;
             box-shadow: 0 0 5px rgba(0,0,0,0.8);
             transition: background-color 0.2s, transform 0.2s;
-            z-index: 35 !important; /* Pasa por encima del cabezal */
+            z-index: 35 !important;
         }
 
         #waveformTrim ::part(region-handle-left):hover::after,
@@ -109,10 +108,9 @@
             transform: translate(-50%, -50%) scale(1.1);
         }
 
-        /* CABEZAL BLANCO CON Z-INDEX 30 (POR DEBAJO DE LAS CÁPSULAS) */
         #waveform ::part(cursor),
         #waveformTrim ::part(cursor) {
-            z-index: 30 !important;
+            z-index: 15 !important;
         }
 
         #waveformTrim ::part(region)::before {
@@ -392,7 +390,7 @@
                         <button id="btnPlayTrim" class="bg-[#444] hover:bg-[#FF422E] px-4 py-2 rounded flex gap-2 items-center text-white transition font-bold">
                             <span id="playIconTrim">►</span> Escuchar Selección
                         </button>
-                        <button id="btnApplyTrim" class="bg-[#FF422E] hover:bg-[#d43726] px-8 py-2 rounded font-bold text-white transition">
+                        <button id="btnApplyTrim" class="bg-[#FF422E] px-8 py-2 rounded font-bold text-white transition opacity-40 cursor-not-allowed pointer-events-none" disabled>
                             Aplicar
                         </button>
                     </div>
@@ -427,6 +425,16 @@
         
         let globalVolValue = 1.0;
 
+        // ESTADO DE REFERENCIA
+        let lastAppliedState = {
+            start: 0,
+            end: 0,
+            fadeIn: 0,
+            fadeOut: 0,
+            adjustVol: false,
+            volLevel: 1.0
+        };
+
         const statusMsg = document.getElementById('statusMsg');
         const extractContainer = document.getElementById('extractContainer');
         const btnProcess = document.getElementById('btnProcess');
@@ -456,6 +464,7 @@
         const btnViewEdited = document.getElementById('btnViewEdited');
         const volSlider = document.getElementById('volSlider');
         const lblVolGlobal = document.getElementById('lblVolGlobal');
+        const btnApplyTrim = document.getElementById('btnApplyTrim');
 
         const hoverOptions = {
             lineColor: '#FF422E',
@@ -472,7 +481,36 @@
             return `${m}:${s.toString().padStart(2, '0')}`;
         };
 
-        // ACTUALIZACIÓN DE RELOJES DE TIEMPO DEPENDIENDO DE LA VISTA
+        // EVALUACIÓN DE CAMBIOS PARA HABILITAR/DESHABILITAR "APLICAR"
+        function checkIfStateChanged() {
+            if (!btnApplyTrim) return;
+
+            const currentStart = parseFloat(trimStartTime.toFixed(2));
+            const currentEnd = parseFloat(trimEndTime.toFixed(2));
+            const currentFadeIn = parseFloat(parseFloat(fInG.value).toFixed(2)) || 0;
+            const currentFadeOut = parseFloat(parseFloat(fOutG.value).toFixed(2)) || 0;
+            const currentAdjVol = chkAdjustVol.checked;
+            const currentVolLvl = parseFloat(parseFloat(volAdjustSlider.value).toFixed(2));
+
+            const isSame = 
+                Math.abs(currentStart - lastAppliedState.start) < 0.005 &&
+                Math.abs(currentEnd - lastAppliedState.end) < 0.005 &&
+                Math.abs(currentFadeIn - lastAppliedState.fadeIn) < 0.005 &&
+                Math.abs(currentFadeOut - lastAppliedState.fadeOut) < 0.005 &&
+                currentAdjVol === lastAppliedState.adjustVol &&
+                (!currentAdjVol || Math.abs(currentVolLvl - lastAppliedState.volLevel) < 0.005);
+
+            if (isSame) {
+                btnApplyTrim.disabled = true;
+                btnApplyTrim.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+                btnApplyTrim.classList.remove('hover:bg-[#d43726]');
+            } else {
+                btnApplyTrim.disabled = false;
+                btnApplyTrim.classList.remove('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+                btnApplyTrim.classList.add('hover:bg-[#d43726]');
+            }
+        }
+
         function updateTimeDisplay() {
             if (!wsGlobal) return;
             const cur = wsGlobal.getCurrentTime();
@@ -526,11 +564,13 @@
                 lblVolAdjust.classList.add('opacity-50');
             }
             if(wsTrim) applyLiveAudioMath(wsTrim, false);
+            checkIfStateChanged();
         });
 
         volAdjustSlider.addEventListener('input', (e) => {
             lblVolAdjust.textContent = `${Math.round(e.target.value * 100)}%`;
             if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
+            checkIfStateChanged();
         });
 
         inpStart.addEventListener('change', (e) => {
@@ -548,6 +588,7 @@
             lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
             renderVisualFades('waveformTrimContainer', false);
             if (wsTrim) applyLiveAudioMath(wsTrim, false);
+            checkIfStateChanged();
         });
 
         inpEnd.addEventListener('change', (e) => {
@@ -565,6 +606,7 @@
             lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
             renderVisualFades('waveformTrimContainer', false);
             if (wsTrim) applyLiveAudioMath(wsTrim, false);
+            checkIfStateChanged();
         });
 
         inpFadeIn.addEventListener('input', (e) => {
@@ -579,6 +621,7 @@
                     renderVisualFades('waveformContainer', true);
                     applyLiveAudioMath(wsGlobal, true);
                 }
+                checkIfStateChanged();
                 return;
             }
             let val = parseFloat(raw);
@@ -594,6 +637,7 @@
                 renderVisualFades('waveformContainer', true);
                 applyLiveAudioMath(wsGlobal, true);
             }
+            checkIfStateChanged();
         });
 
         inpFadeOut.addEventListener('input', (e) => {
@@ -608,6 +652,7 @@
                     renderVisualFades('waveformContainer', true);
                     applyLiveAudioMath(wsGlobal, true);
                 }
+                checkIfStateChanged();
                 return;
             }
             let val = parseFloat(raw);
@@ -623,9 +668,9 @@
                 renderVisualFades('waveformContainer', true);
                 applyLiveAudioMath(wsGlobal, true);
             }
+            checkIfStateChanged();
         });
 
-        // RENDERIZADO VISUAL DE FADES Y LÍNEAS DE LÍMITE EN ROJO VIVO
         function renderVisualFades(containerId, isGlobalEdited) {
             const container = document.getElementById(containerId);
             const dur = videoDuration || 1;
@@ -636,8 +681,6 @@
 
             if (isGlobalEdited) {
                 container.querySelectorAll('.visual-fx').forEach(el => el.remove());
-                
-                // Fondo Oscurecido
                 const bLeft = document.createElement('div');
                 bLeft.className = 'visual-fx blackout-overlay';
                 bLeft.style.width = `${startP}%`;
@@ -651,7 +694,6 @@
                 container.appendChild(bLeft);
                 container.appendChild(bRight);
 
-                // LÍNEAS VERTICALES ROJO VIVO EN LOS LÍMITES DE CORTE GLOBAL
                 const lineLeft = document.createElement('div');
                 lineLeft.className = 'visual-fx fade-overlay';
                 lineLeft.style.left = `${startP}%`;
@@ -671,7 +713,6 @@
                 container.appendChild(lineLeft);
                 container.appendChild(lineRight);
 
-                // Gradientes de Fade
                 if (inSec > 0) {
                     const fInDiv = document.createElement('div');
                     fInDiv.className = 'visual-fx fade-overlay fade-in-gradient';
@@ -706,6 +747,7 @@
                 renderVisualFades('waveformContainer', true);
                 applyLiveAudioMath(wsGlobal, true);
             }
+            checkIfStateChanged();
         });
 
         fOutG.addEventListener('input', () => {
@@ -718,6 +760,7 @@
                 renderVisualFades('waveformContainer', true);
                 applyLiveAudioMath(wsGlobal, true);
             }
+            checkIfStateChanged();
         });
 
         function setGlobalView(edited) {
@@ -901,6 +944,16 @@
                 trimStartTime = 0;
                 trimEndTime = videoDuration;
 
+                // REINICIAR ESTADO DE REFERENCIA TRAS NUEVA EXTRACCIÓN
+                lastAppliedState = {
+                    start: 0,
+                    end: parseFloat(videoDuration.toFixed(2)),
+                    fadeIn: 0,
+                    fadeOut: 0,
+                    adjustVol: false,
+                    volLevel: 1.0
+                };
+
                 document.getElementById('metadataSection').classList.remove('hidden');
                 document.getElementById('editorSection').classList.remove('hidden');
                 document.getElementById('downloadSection').classList.remove('hidden');
@@ -954,6 +1007,7 @@
                     
                     renderVisualFades('waveformTrimContainer', false);
                     applyLiveAudioMath(wsTrim, false);
+                    checkIfStateChanged();
 
                     trimRegion.on('update', () => {
                         if (trimRegion.start !== trimStartTime && trimRegion.end === trimEndTime) {
@@ -971,6 +1025,7 @@
                         
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
+                        checkIfStateChanged();
                     });
                 });
 
@@ -995,6 +1050,7 @@
                 wsTrim.on('pause', () => document.getElementById('playIconTrim').textContent = '►');
             } else {
                 applyLiveAudioMath(wsTrim, false);
+                checkIfStateChanged();
             }
         });
 
@@ -1003,12 +1059,25 @@
             document.getElementById('trimModal').classList.add('hidden');
         });
 
-        document.getElementById('btnApplyTrim').addEventListener('click', () => {
+        btnApplyTrim.addEventListener('click', () => {
+            if (btnApplyTrim.disabled) return;
             if (wsTrim && wsTrim.isPlaying()) wsTrim.pause();
+            
+            // GUARDAR ESTADO ACTUAL COMO NUEVA REFERENCIA
+            lastAppliedState = {
+                start: parseFloat(trimStartTime.toFixed(2)),
+                end: parseFloat(trimEndTime.toFixed(2)),
+                fadeIn: parseFloat(parseFloat(fInG.value).toFixed(2)) || 0,
+                fadeOut: parseFloat(parseFloat(fOutG.value).toFixed(2)) || 0,
+                adjustVol: chkAdjustVol.checked,
+                volLevel: parseFloat(parseFloat(volAdjustSlider.value).toFixed(2))
+            };
+
             document.getElementById('trimModal').classList.add('hidden');
             
             viewToggle.classList.remove('hidden');
             setGlobalView(true);
+            checkIfStateChanged();
         });
 
         document.getElementById('btnPlayTrim').addEventListener('click', () => {
@@ -1105,6 +1174,7 @@
                     volAdjustSlider.value = v;
                     lblVolAdjust.textContent = `${Math.round(v * 100)}%`;
                     applyLiveAudioMath(wsTrim, false);
+                    checkIfStateChanged();
                 } else {
                     if(!isEditedViewActive) {
                         let v = Math.min(1, globalVolValue + 0.05);
@@ -1123,6 +1193,7 @@
                     volAdjustSlider.value = v;
                     lblVolAdjust.textContent = `${Math.round(v * 100)}%`;
                     applyLiveAudioMath(wsTrim, false);
+                    checkIfStateChanged();
                 } else {
                     if(!isEditedViewActive) {
                         let v = Math.max(0, globalVolValue - 0.05);
@@ -1154,6 +1225,7 @@
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
+                        checkIfStateChanged();
                     } 
                     else if (activeMode === 'right' && trimRegion) {
                         let newEnd = trimEndTime + (step * direction);
@@ -1166,6 +1238,7 @@
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
+                        checkIfStateChanged();
                     } 
                     else {
                         let current = activeWs.getCurrentTime();
