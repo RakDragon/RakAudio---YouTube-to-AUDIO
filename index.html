@@ -10,12 +10,9 @@
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
     <style>
-        input[type=range]::-webkit-slider-thumb {
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            background: #FF422E;
-            border-radius: 50%;
+        /* Estilo general para todos los sliders (barras de llenado rojo) */
+        input[type=range] {
+            accent-color: #FF422E;
             cursor: pointer;
         }
 
@@ -34,6 +31,11 @@
             background: rgba(255, 66, 46, 0.2);
             transition: width 0.3s ease-out;
             z-index: 0;
+        }
+
+        /* Barra de carga sólida para el botón de procesamiento */
+        #btnProcess.loading-bg::before {
+            background: #FF422E; 
         }
 
         .loading-bg>* {
@@ -72,14 +74,17 @@
             transform: translate(-50%, -50%) scale(1.1);
         }
 
+        /* Teclas (kbd) estilo Imagen 1 */
         kbd {
-            background-color: #3b3b3b;
-            border: 1px solid #555555;
+            background-color: #1a1a1a;
+            border: 1px solid #FF422E;
             border-radius: 4px;
-            padding: 2px 6px;
-            font-size: 0.8em;
+            padding: 2px 8px;
+            font-size: 0.85em;
             color: #ffffff;
-            box-shadow: 0 2px 0 #1a1a1a;
+            box-shadow: 0 3px 0 #FF422E;
+            display: inline-block;
+            margin-bottom: 4px;
         }
     </style>
 </head>
@@ -165,7 +170,7 @@
                 </div>
 
                 <div class="space-y-4 bg-[#3b3b3b] p-4 rounded border border-[#444] text-white">
-                    <h4 class="font-bold text-sm text-[#FF422E]">Controles de Fade</h4>
+                    <h4 class="font-bold text-sm text-[#FFFFFF]">Controles de Fade</h4>
                     <div>
                         <label class="block text-xs mb-1 flex justify-between">
                             <span>Fade In (Segundos):</span> <span id="lblFadeInG">0s</span>
@@ -196,10 +201,13 @@
                 </div>
 
                 <div class="mb-4">
-                    <div class="flex justify-between text-sm mb-2 font-mono text-white">
+                    <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
                         <span>Inicio: <span id="lblStart" class="font-bold">0.00</span>s</span>
-                        <span class="font-bold bg-[#1f1f1f] px-3 py-1 rounded border border-[#444]">Duración: <span
-                                id="lblTrimDuration" class="text-[#FF422E]">0.00</span>s</span>
+                        
+                        <!-- Píldora de Duración estilo Imagen 3 -->
+                        <span class="bg-[#1a1a1a] text-[#FF422E] border border-[#FF422E] px-3 py-1 rounded">Duración: <span
+                                id="lblTrimDuration">0.00</span>s</span>
+                                
                         <span>Fin: <span id="lblEnd" class="font-bold">0.00</span>s</span>
                     </div>
 
@@ -212,14 +220,20 @@
                         Atajos de teclado
                         <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#444444] text-white transition-all shadow-[0_0_8px_rgba(255,255,255,0.2)]">Moviendo Cabezal (2)</span>
                     </p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-white opacity-90 font-mono text-xs">
-                        <div><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> Foco Límite Izq / Cabezal / Der</div>
-                        <div><kbd>Espacio</kbd> Play / Pausa</div>
-                        <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
-                        <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
-                        <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
-                        <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
-                        <div class="sm:col-span-2"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 ms)</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-6 text-white opacity-90 font-mono text-xs">
+                        <!-- Columna 1 -->
+                        <div class="space-y-4">
+                            <div><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> Foco Límite Izq / Cabezal / Der</div>
+                            <div><kbd>↑</kbd> / <kbd>↓</kbd> Subir / Bajar Volumen</div>
+                            <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 5s</div>
+                            <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Ajuste Fino (1 milisegundo)</div>
+                        </div>
+                        <!-- Columna 2 -->
+                        <div class="space-y-4">
+                            <div><kbd>Espacio</kbd> Play / Pausa</div>
+                            <div><kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 10s</div>
+                            <div><kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> Retroceder / Avanzar 1s</div>
+                        </div>
                     </div>
                 </div>
 
@@ -237,7 +251,7 @@
         <div id="downloadSection" class="hidden bg-[#2B2B2B] p-6 rounded-lg shadow-lg text-center border border-[#3b3b3b]">
             <button id="btnProcess"
                 class="loading-bg bg-[#FF422E] hover:bg-[#d43726] w-full py-4 rounded text-xl font-bold transition shadow-[0_0_15px_rgba(255,66,46,0.4)] text-white">
-                <span>Procesar y Descargar Audio</span>
+                <span class="relative z-10">Procesar y Descargar Audio</span>
             </button>
         </div>
     </div>
@@ -608,7 +622,7 @@
 
             btnProcess.disabled = true;
             btnProcess.classList.remove('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
-            btnProcess.classList.add('bg-[#444444]');
+            btnProcess.classList.add('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
 
             if (currentEvtSource) currentEvtSource.close();
             currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
@@ -619,11 +633,11 @@
                 spanText.textContent = data.msg;
 
                 if (data.status === 'done') {
-                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
                     btnProcess.classList.add('bg-[#FF422E]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
                     currentEvtSource.close();
                 } else if (data.status === 'error') {
-                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
                     btnProcess.classList.add('bg-[#FF422E]');
                     currentEvtSource.close();
                 }
@@ -672,7 +686,7 @@
                 spanText.textContent = `Error: ${err.message}`;
                 setTimeout(() => {
                     btnProcess.disabled = false;
-                    btnProcess.classList.remove('bg-[#444444]');
+                    btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
                     btnProcess.classList.add('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
                     spanText.textContent = 'Procesar y Descargar Audio';
                     btnProcess.style.setProperty('--progress', '0%');
