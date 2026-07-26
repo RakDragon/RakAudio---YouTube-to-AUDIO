@@ -18,7 +18,6 @@ PROCESSED_DIR = "processed_audio"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-# Diccionario en memoria para rastrear el progreso de los clientes
 progress_store = {}
 
 @app.route("/api/progress")
@@ -53,7 +52,6 @@ def extract():
 
     def ytdl_progress_hook(d):
         if d['status'] == 'downloading':
-            # Limpiar caracteres ANSI del porcentaje que arroja yt-dlp
             percent_str = d.get('_percent_str', '0%').replace('%', '')
             percent_str = re.sub(r'\x1b[^m]*m', '', percent_str).strip()
             try:
@@ -119,6 +117,10 @@ def process_audio():
     fade_out = float(data.get("fadeOut", 0))
     out_format = data.get("format", "mp3")
     quality = data.get("quality", "320k")
+    
+    # Nuevos parámetros de volumen
+    adjust_vol = data.get("adjustVol", False)
+    vol_level = float(data.get("volLevel", 1.0))
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -133,6 +135,11 @@ def process_audio():
         stream = ffmpeg.input(input_path, ss=start, to=end)
         duration_trimmed = end - start
 
+        # Filtro de volumen (Aplicar primero si existe)
+        if adjust_vol and vol_level != 1.0:
+            stream = ffmpeg.filter(stream, "volume", str(vol_level))
+
+        # Filtros de fade
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in", start_time=0, duration=fade_in)
         if fade_out > 0:
@@ -146,7 +153,6 @@ def process_audio():
 
         stream = ffmpeg.output(stream, output_path, **kwargs)
         
-        # Ejecutar asíncronamente capturando stderr para leer el avance
         process = ffmpeg.run_async(stream, pipe_stderr=True, overwrite_output=True, quiet=True)
         time_regex = re.compile(r'time=(?P<time>\d+:\d+:\d+\.\d+)')
         
