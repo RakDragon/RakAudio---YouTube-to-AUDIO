@@ -24,6 +24,16 @@
             cursor: pointer;
         }
 
+        /* Inputs numéricos sin flechas nativas para diseño más limpio */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
         .loading-bg {
             position: relative;
             overflow: hidden;
@@ -50,12 +60,19 @@
             z-index: 1;
         }
 
+        /* Z-INDEX DE LOS BORDES DE RECORTE (LÍNEA NEGRA POR DELANTE) */
+        #waveformTrim ::part(region) {
+            border-left: 2px solid #000 !important;
+            border-right: 2px solid #000 !important;
+            z-index: 5 !important;
+        }
+
         #waveformTrim ::part(region-handle-left),
         #waveformTrim ::part(region-handle-right) {
             width: 2px !important;
             background-color: #FF422E !important;
             cursor: ew-resize;
-            z-index: 10 !important;
+            z-index: -1 !important; /* Manda la línea roja DETRÁS del borde negro */
         }
 
         #waveformTrim ::part(region-handle-left)::after,
@@ -69,15 +86,14 @@
             height: 26px;
             background-color: #FF422E;
             border-radius: 3px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.6);
-            transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
-            z-index: 10 !important;
+            box-shadow: 0 0 5px rgba(0,0,0,0.8);
+            transition: background-color 0.2s, transform 0.2s;
+            z-index: -1 !important; /* Cápsula roja por detrás */
         }
 
         #waveformTrim ::part(region-handle-left):hover::after,
         #waveformTrim ::part(region-handle-right):hover::after {
             background-color: #ff6454;
-            box-shadow: 0 0 8px rgba(255, 66, 46, 0.8);
             transform: translate(-50%, -50%) scale(1.1);
         }
 
@@ -88,7 +104,7 @@
             width: var(--fade-in-width, 0%);
             background: linear-gradient(to right, rgba(26,26,26,0.9), transparent);
             pointer-events: none;
-            z-index: 1;
+            z-index: -2;
         }
         #waveformTrim ::part(region)::after {
             content: '';
@@ -97,7 +113,7 @@
             width: var(--fade-out-width, 0%);
             background: linear-gradient(to left, rgba(26,26,26,0.9), transparent);
             pointer-events: none;
-            z-index: 1;
+            z-index: -2;
         }
 
         kbd {
@@ -229,9 +245,10 @@
                     <button id="btnEnd"
                         class="bg-[#222] hover:bg-[#FF422E] px-3 py-1 rounded font-bold text-white transition">&gt;&gt;</button>
                 </div>
+                <!-- VOLUMEN GLOBAL LÍMITE 100% -->
                 <div class="flex items-center gap-2 w-full md:w-auto text-white">
                     <span class="text-sm">Vol:</span>
-                    <input type="range" id="volSlider" min="0" max="2" step="0.05" value="1" class="w-24">
+                    <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" class="w-24">
                     <span id="lblVolGlobal" class="font-mono text-xs w-8 text-right opacity-80">100%</span>
                 </div>
             </div>
@@ -274,9 +291,14 @@
                     <h4 class="font-bold text-[#FF422E] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Recorte de Audio</h4>
                     
                     <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
-                        <span>Inicio: <span id="lblStart" class="font-bold text-[#FF422E]">0.00</span>s</span>
+                        <!-- INPUTS EDITABLES: INICIO Y FIN -->
+                        <span>Inicio: 
+                            <input type="number" id="inpStart" class="bg-transparent font-bold text-[#FF422E] w-16 text-center border-b border-gray-600 focus:outline-none focus:border-[#FF422E]" step="0.01" min="0" value="0.00">s
+                        </span>
                         <span class="bg-[#1a1a1a] text-[#FF422E] border border-[#FF422E] px-3 py-1 rounded">Duración: <span id="lblTrimDuration">0.00</span>s</span>
-                        <span>Fin: <span id="lblEnd" class="font-bold text-[#FF422E]">0.00</span>s</span>
+                        <span>Fin: 
+                            <input type="number" id="inpEnd" class="bg-transparent font-bold text-[#FF422E] w-16 text-center border-b border-gray-600 focus:outline-none focus:border-[#FF422E]" step="0.01" min="0" value="0.00">s
+                        </span>
                     </div>
 
                     <div id="waveformTrimContainer" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-32 relative overflow-hidden mb-4">
@@ -308,14 +330,18 @@
                     <h4 class="font-bold text-[#FFFFFF] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Controles de Fade</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label class="block text-sm font-bold mb-2 flex justify-between">
-                                <span>Fade In (Segundos):</span> <span id="lblFadeInG" class="text-[#FF422E]">0s</span>
+                            <!-- INPUT EDITABLE: FADE IN -->
+                            <label class="block text-sm font-bold mb-2 flex justify-between items-center">
+                                <span>Fade In (Segundos):</span> 
+                                <span><input type="number" id="inpFadeIn" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
                             </label>
                             <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                         </div>
                         <div>
-                            <label class="block text-sm font-bold mb-2 flex justify-between">
-                                <span>Fade Out (Segundos):</span> <span id="lblFadeOutG" class="text-[#FF422E]">0s</span>
+                            <!-- INPUT EDITABLE: FADE OUT -->
+                            <label class="block text-sm font-bold mb-2 flex justify-between items-center">
+                                <span>Fade Out (Segundos):</span> 
+                                <span><input type="number" id="inpFadeOut" class="bg-[#1f1f1f] text-[#FF422E] font-bold w-12 text-center rounded border border-[#444] focus:outline-none focus:border-[#FF422E] p-0.5" step="0.1" min="0" max="10" value="0">s</span>
                             </label>
                             <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                         </div>
@@ -378,8 +404,8 @@
         const lblCurrentTime = document.getElementById('lblCurrentTime');
         const lblTotalTime = document.getElementById('lblTotalTime');
 
-        const lblStart = document.getElementById('lblStart');
-        const lblEnd = document.getElementById('lblEnd');
+        const inpStart = document.getElementById('inpStart');
+        const inpEnd = document.getElementById('inpEnd');
         const lblTrimDuration = document.getElementById('lblTrimDuration');
         const activeModeBadge = document.getElementById('activeModeBadge');
 
@@ -388,8 +414,8 @@
         
         const fInG = document.getElementById('fadeInGlobal');
         const fOutG = document.getElementById('fadeOutGlobal');
-        const lFInG = document.getElementById('lblFadeInG');
-        const lFOutG = document.getElementById('lblFadeOutG');
+        const inpFadeIn = document.getElementById('inpFadeIn');
+        const inpFadeOut = document.getElementById('inpFadeOut');
 
         const chkAdjustVol = document.getElementById('chkAdjustVol');
         const volAdjustSlider = document.getElementById('volAdjustSlider');
@@ -455,6 +481,40 @@
             if (chkAdjustVol.checked && wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
+        // Sincronización de Inputs Editables con la Región
+        inpStart.addEventListener('change', (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            if(val < 0) val = 0;
+            if(val >= trimEndTime - 0.01) val = trimEndTime - 0.01;
+            e.target.value = val.toFixed(2);
+            if (trimRegion) trimRegion.setOptions({ start: val });
+        });
+
+        inpEnd.addEventListener('change', (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            if(val > videoDuration) val = videoDuration;
+            if(val <= trimStartTime + 0.01) val = trimStartTime + 0.01;
+            e.target.value = val.toFixed(2);
+            if (trimRegion) trimRegion.setOptions({ end: val });
+        });
+
+        // Sincronización de Inputs Editables de Fade
+        inpFadeIn.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value);
+            if(val < 0) val = 0;
+            if(val > 10) val = 10;
+            fInG.value = val;
+            fInG.dispatchEvent(new Event('input'));
+        });
+
+        inpFadeOut.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value);
+            if(val < 0) val = 0;
+            if(val > 10) val = 10;
+            fOutG.value = val;
+            fOutG.dispatchEvent(new Event('input'));
+        });
+
         function renderVisualFades(containerId, isGlobalEdited) {
             const container = document.getElementById(containerId);
             const dur = videoDuration || 1;
@@ -503,7 +563,7 @@
         }
 
         fInG.addEventListener('input', () => {
-            lFInG.textContent = `${fInG.value}s`;
+            inpFadeIn.value = fInG.value;
             if(wsTrim) {
                 renderVisualFades('waveformTrimContainer', false);
                 applyLiveAudioMath(wsTrim, false);
@@ -515,7 +575,7 @@
         });
 
         fOutG.addEventListener('input', () => {
-            lFOutG.textContent = `${fOutG.value}s`;
+            inpFadeOut.value = fOutG.value;
             if(wsTrim) {
                 renderVisualFades('waveformTrimContainer', false);
                 applyLiveAudioMath(wsTrim, false);
@@ -537,7 +597,10 @@
                 volSlider.disabled = true;
                 volSlider.classList.add('opacity-50', 'cursor-not-allowed');
                 
+                // Muestra el volumen alterado por la edición (hasta 200%)
                 const editVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
+                // Temporarily allow slider visually to show >1 just for UI reflection, though locked.
+                volSlider.max = "2"; 
                 volSlider.value = editVol;
                 lblVolGlobal.textContent = `${Math.round(editVol * 100)}%`;
                 
@@ -552,6 +615,8 @@
                 volSlider.disabled = false;
                 volSlider.classList.remove('opacity-50', 'cursor-not-allowed');
                 
+                // Restaura al 100% límite
+                volSlider.max = "1";
                 volSlider.value = globalVolValue;
                 lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
                 if (wsGlobal) wsGlobal.setVolume(globalVolValue);
@@ -679,7 +744,8 @@
 
             if (wsTrim) { wsTrim.destroy(); wsTrim = null; }
 
-            currentEvtSource = new EventSource(`http://127.0.0.1:5000/api/progress?client_id=${clientId}`);
+            // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
+            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 extractContainer.style.setProperty('--progress', `${data.progress}%`);
@@ -688,7 +754,8 @@
             };
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/extract', {
+                // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
+                const res = await fetch('http://localhost:5000/api/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: url, client_id: clientId })
@@ -759,8 +826,8 @@
                         resize: true
                     });
 
-                    lblStart.textContent = trimStartTime.toFixed(2);
-                    lblEnd.textContent = trimEndTime.toFixed(2);
+                    inpStart.value = trimStartTime.toFixed(2);
+                    inpEnd.value = trimEndTime.toFixed(2);
                     lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                     
                     renderVisualFades('waveformTrimContainer', false);
@@ -775,8 +842,9 @@
 
                         trimStartTime = trimRegion.start;
                         trimEndTime = trimRegion.end;
-                        lblStart.textContent = trimStartTime.toFixed(2);
-                        lblEnd.textContent = trimEndTime.toFixed(2);
+                        
+                        inpStart.value = trimStartTime.toFixed(2);
+                        inpEnd.value = trimEndTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         
                         renderVisualFades('waveformTrimContainer', false);
@@ -911,7 +979,7 @@
                     applyLiveAudioMath(wsTrim, false);
                 } else {
                     if(!isEditedViewActive) {
-                        let v = Math.min(2, globalVolValue + 0.05);
+                        let v = Math.min(1, globalVolValue + 0.05);
                         globalVolValue = v;
                         volSlider.value = v;
                         lblVolGlobal.textContent = `${Math.round(v * 100)}%`;
@@ -954,7 +1022,7 @@
                         
                         trimRegion.setOptions({ start: newStart });
                         trimStartTime = newStart;
-                        lblStart.textContent = trimStartTime.toFixed(2);
+                        inpStart.value = trimStartTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
@@ -966,7 +1034,7 @@
                         
                         trimRegion.setOptions({ end: newEnd });
                         trimEndTime = newEnd;
-                        lblEnd.textContent = trimEndTime.toFixed(2);
+                        inpEnd.value = trimEndTime.toFixed(2);
                         lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
@@ -1014,7 +1082,8 @@
             btnProcess.classList.add('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
 
             if (currentEvtSource) currentEvtSource.close();
-            currentEvtSource = new EventSource(`http://127.0.0.1:5000/api/progress?client_id=${clientId}`);
+            // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
+            currentEvtSource = new EventSource(`http://localhost:5000/api/progress?client_id=${clientId}`);
 
             currentEvtSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
@@ -1033,7 +1102,8 @@
             };
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/process', {
+                // IMPORTANTE: REVERTIDO A LOCALHOST:5000 COMO ORDENADO
+                const res = await fetch('http://localhost:5000/api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
