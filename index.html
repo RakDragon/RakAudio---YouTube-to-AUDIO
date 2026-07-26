@@ -425,7 +425,6 @@
         
         let globalVolValue = 1.0;
 
-        // ESTADO DE REFERENCIA
         let lastAppliedState = {
             start: 0,
             end: 0,
@@ -481,7 +480,6 @@
             return `${m}:${s.toString().padStart(2, '0')}`;
         };
 
-        // EVALUACIÓN DE CAMBIOS PARA HABILITAR/DESHABILITAR "APLICAR"
         function checkIfStateChanged() {
             if (!btnApplyTrim) return;
 
@@ -493,12 +491,12 @@
             const currentVolLvl = parseFloat(parseFloat(volAdjustSlider.value).toFixed(2));
 
             const isSame = 
-                Math.abs(currentStart - lastAppliedState.start) < 0.005 &&
-                Math.abs(currentEnd - lastAppliedState.end) < 0.005 &&
-                Math.abs(currentFadeIn - lastAppliedState.fadeIn) < 0.005 &&
-                Math.abs(currentFadeOut - lastAppliedState.fadeOut) < 0.005 &&
+                Math.abs(currentStart - lastAppliedState.start) < 0.01 &&
+                Math.abs(currentEnd - lastAppliedState.end) < 0.01 &&
+                Math.abs(currentFadeIn - lastAppliedState.fadeIn) < 0.01 &&
+                Math.abs(currentFadeOut - lastAppliedState.fadeOut) < 0.01 &&
                 currentAdjVol === lastAppliedState.adjustVol &&
-                (!currentAdjVol || Math.abs(currentVolLvl - lastAppliedState.volLevel) < 0.005);
+                (!currentAdjVol || Math.abs(currentVolLvl - lastAppliedState.volLevel) < 0.01);
 
             if (isSame) {
                 btnApplyTrim.disabled = true;
@@ -573,6 +571,7 @@
             checkIfStateChanged();
         });
 
+        inpStart.addEventListener('input', () => checkIfStateChanged());
         inpStart.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val < 0) val = 0;
@@ -591,6 +590,7 @@
             checkIfStateChanged();
         });
 
+        inpEnd.addEventListener('input', () => checkIfStateChanged());
         inpEnd.addEventListener('change', (e) => {
             let val = parseFloat(e.target.value) || 0;
             if(val > videoDuration) val = videoDuration;
@@ -944,7 +944,6 @@
                 trimStartTime = 0;
                 trimEndTime = videoDuration;
 
-                // REINICIAR ESTADO DE REFERENCIA TRAS NUEVA EXTRACCIÓN
                 lastAppliedState = {
                     start: 0,
                     end: parseFloat(videoDuration.toFixed(2)),
@@ -1009,15 +1008,38 @@
                     applyLiveAudioMath(wsTrim, false);
                     checkIfStateChanged();
 
+                    // EVENTO DE ARRASTRE DE MOUSE CON AJUSTE MAGNÉTICO (IMÁN)
                     trimRegion.on('update', () => {
-                        if (trimRegion.start !== trimStartTime && trimRegion.end === trimEndTime) {
+                        let curStart = trimRegion.start;
+                        let curEnd = trimRegion.end;
+                        const snapThreshold = 0.35; // Rango de atraccion magnetica en segundos
+
+                        // Imán para Límite Izquierdo
+                        if (Math.abs(curStart - lastAppliedState.start) < snapThreshold) {
+                            curStart = lastAppliedState.start;
+                            trimRegion.setOptions({ start: curStart });
+                        } else if (Math.abs(curStart - 0) < snapThreshold) {
+                            curStart = 0;
+                            trimRegion.setOptions({ start: curStart });
+                        }
+
+                        // Imán para Límite Derecho
+                        if (Math.abs(curEnd - lastAppliedState.end) < snapThreshold) {
+                            curEnd = lastAppliedState.end;
+                            trimRegion.setOptions({ end: curEnd });
+                        } else if (Math.abs(curEnd - videoDuration) < snapThreshold) {
+                            curEnd = videoDuration;
+                            trimRegion.setOptions({ end: curEnd });
+                        }
+
+                        if (curStart !== trimStartTime && curEnd === trimEndTime) {
                             setActiveMode('left');
-                        } else if (trimRegion.end !== trimEndTime && trimRegion.start === trimStartTime) {
+                        } else if (curEnd !== trimEndTime && curStart === trimStartTime) {
                             setActiveMode('right');
                         }
 
-                        trimStartTime = trimRegion.start;
-                        trimEndTime = trimRegion.end;
+                        trimStartTime = curStart;
+                        trimEndTime = curEnd;
                         
                         inpStart.value = trimStartTime.toFixed(2);
                         inpEnd.value = trimEndTime.toFixed(2);
@@ -1025,6 +1047,10 @@
                         
                         renderVisualFades('waveformTrimContainer', false);
                         applyLiveAudioMath(wsTrim, false);
+                        checkIfStateChanged();
+                    });
+
+                    trimRegion.on('update-end', () => {
                         checkIfStateChanged();
                     });
                 });
@@ -1063,7 +1089,6 @@
             if (btnApplyTrim.disabled) return;
             if (wsTrim && wsTrim.isPlaying()) wsTrim.pause();
             
-            // GUARDAR ESTADO ACTUAL COMO NUEVA REFERENCIA
             lastAppliedState = {
                 start: parseFloat(trimStartTime.toFixed(2)),
                 end: parseFloat(trimEndTime.toFixed(2)),
