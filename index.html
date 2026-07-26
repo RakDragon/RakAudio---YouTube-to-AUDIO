@@ -86,6 +86,7 @@
             right: -6px !important;
         }
 
+        /* CÁPSULA ROJA DE AGARRE CON Z-INDEX 35 (POR ENCIMA DEL CABEZAL BLANCO) */
         #waveformTrim ::part(region-handle-left)::after,
         #waveformTrim ::part(region-handle-right)::after {
             content: '';
@@ -99,6 +100,7 @@
             border-radius: 3px;
             box-shadow: 0 0 5px rgba(0,0,0,0.8);
             transition: background-color 0.2s, transform 0.2s;
+            z-index: 35 !important; /* Pasa por encima del cabezal */
         }
 
         #waveformTrim ::part(region-handle-left):hover::after,
@@ -107,7 +109,7 @@
             transform: translate(-50%, -50%) scale(1.1);
         }
 
-        /* EL CABEZAL / CURSOR DE WAVESURFER SIEMPRE POR ENCIMA DE LOS FADES */
+        /* CABEZAL BLANCO CON Z-INDEX 30 (POR DEBAJO DE LAS CÁPSULAS) */
         #waveform ::part(cursor),
         #waveformTrim ::part(cursor) {
             z-index: 30 !important;
@@ -154,7 +156,6 @@
             text-shadow: 0 0 8px #ffffff;
         }
 
-        /* Resaltado rojo estático (sin animación de tecleo) */
         kbd.kbd-red-static {
             background-color: #FF422E;
             border-color: #FF422E;
@@ -163,7 +164,6 @@
             transform: translateY(0);
         }
 
-        /* Resaltado tenue/oscuro (sugerencia de combo) */
         kbd.kbd-red-dim {
             background-color: rgba(255, 66, 46, 0.25);
             border-color: #b32d20;
@@ -465,6 +465,28 @@
             labelSize: '11px',
         };
 
+        const formatTime = (seconds) => {
+            if (isNaN(seconds) || seconds < 0) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        // ACTUALIZACIÓN DE RELOJES DE TIEMPO DEPENDIENDO DE LA VISTA
+        function updateTimeDisplay() {
+            if (!wsGlobal) return;
+            const cur = wsGlobal.getCurrentTime();
+            if (isEditedViewActive) {
+                const relativeCur = Math.max(0, cur - trimStartTime);
+                const trimmedDuration = Math.max(0, trimEndTime - trimStartTime);
+                lblCurrentTime.textContent = formatTime(relativeCur);
+                lblTotalTime.textContent = formatTime(trimmedDuration);
+            } else {
+                lblCurrentTime.textContent = formatTime(cur);
+                lblTotalTime.textContent = formatTime(videoDuration);
+            }
+        }
+
         function applyLiveAudioMath(ws, isGlobalEdited) {
             let currentTime = ws.getCurrentTime();
             let start = isGlobalEdited ? trimStartTime : (ws === wsTrim ? trimStartTime : 0);
@@ -545,7 +567,6 @@
             if (wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
-        // CORRECCIÓN: Manejo de borrado manual con Backspace en Fade In
         inpFadeIn.addEventListener('input', (e) => {
             let raw = e.target.value;
             if (raw === '') {
@@ -575,7 +596,6 @@
             }
         });
 
-        // CORRECCIÓN: Manejo de borrado manual con Backspace en Fade Out
         inpFadeOut.addEventListener('input', (e) => {
             let raw = e.target.value;
             if (raw === '') {
@@ -605,6 +625,7 @@
             }
         });
 
+        // RENDERIZADO VISUAL DE FADES Y LÍNEAS DE LÍMITE EN ROJO VIVO
         function renderVisualFades(containerId, isGlobalEdited) {
             const container = document.getElementById(containerId);
             const dur = videoDuration || 1;
@@ -615,6 +636,8 @@
 
             if (isGlobalEdited) {
                 container.querySelectorAll('.visual-fx').forEach(el => el.remove());
+                
+                // Fondo Oscurecido
                 const bLeft = document.createElement('div');
                 bLeft.className = 'visual-fx blackout-overlay';
                 bLeft.style.width = `${startP}%`;
@@ -628,6 +651,27 @@
                 container.appendChild(bLeft);
                 container.appendChild(bRight);
 
+                // LÍNEAS VERTICALES ROJO VIVO EN LOS LÍMITES DE CORTE GLOBAL
+                const lineLeft = document.createElement('div');
+                lineLeft.className = 'visual-fx fade-overlay';
+                lineLeft.style.left = `${startP}%`;
+                lineLeft.style.width = '2px';
+                lineLeft.style.backgroundColor = '#FF422E';
+                lineLeft.style.boxShadow = '0 0 6px #FF422E';
+                lineLeft.style.zIndex = '15';
+
+                const lineRight = document.createElement('div');
+                lineRight.className = 'visual-fx fade-overlay';
+                lineRight.style.left = `${endP}%`;
+                lineRight.style.width = '2px';
+                lineRight.style.backgroundColor = '#FF422E';
+                lineRight.style.boxShadow = '0 0 6px #FF422E';
+                lineRight.style.zIndex = '15';
+
+                container.appendChild(lineLeft);
+                container.appendChild(lineRight);
+
+                // Gradientes de Fade
                 if (inSec > 0) {
                     const fInDiv = document.createElement('div');
                     fInDiv.className = 'visual-fx fade-overlay fade-in-gradient';
@@ -710,6 +754,7 @@
                 
                 document.getElementById('waveformContainer').querySelectorAll('.visual-fx').forEach(el => el.remove());
             }
+            updateTimeDisplay();
         }
 
         btnViewOriginal.addEventListener('click', () => setGlobalView(false));
@@ -748,13 +793,6 @@
             statusMsg.className = `text-sm mt-2 block z-10 font-mono text-white ${isError ? 'font-bold text-[#FF422E]' : ''}`;
         };
 
-        const formatTime = (seconds) => {
-            if (isNaN(seconds)) return "0:00";
-            const m = Math.floor(seconds / 60);
-            const s = Math.floor(seconds % 60);
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        };
-
         const initWaveSurfer = () => {
             if (wsGlobal) wsGlobal.destroy();
             wsGlobal = WaveSurfer.create({
@@ -773,12 +811,11 @@
             wsGlobal.on('pause', () => document.getElementById('btnPlayPause').textContent = '► Play');
 
             wsGlobal.on('ready', () => {
-                lblTotalTime.textContent = formatTime(wsGlobal.getDuration());
-                lblCurrentTime.textContent = formatTime(0);
+                updateTimeDisplay();
                 wsGlobal.setVolume(globalVolValue);
             });
             wsGlobal.on('audioprocess', () => {
-                lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
+                updateTimeDisplay();
                 if(isEditedViewActive) {
                     if(wsGlobal.getCurrentTime() >= trimEndTime) {
                         wsGlobal.pause();
@@ -797,7 +834,7 @@
                     }
                     applyLiveAudioMath(wsGlobal, true);
                 }
-                lblCurrentTime.textContent = formatTime(wsGlobal.getCurrentTime());
+                updateTimeDisplay();
             });
         };
 
@@ -987,7 +1024,6 @@
 
         const keysPressed = new Set();
 
-        // CORRECCIÓN: Lógica para guía visual estática (rojo sólido y rojo tenue)
         function updateKeyboardUI() {
             document.querySelectorAll('kbd').forEach(k => {
                 k.classList.remove('kbd-pressed', 'kbd-red-static', 'kbd-red-dim');
@@ -1028,18 +1064,15 @@
                     document.getElementById('t-10s')?.classList.add('desc-highlight');
                 }
             } else {
-                // Estado al presionar modificadores sin direccionales
                 if (hasCtrl && hasShift) {
                     document.getElementById('k-ctrl-ms')?.classList.add('kbd-pressed');
                     document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
                 } else if (hasShift) {
                     document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
-                    // Guía en comando de ajuste fino
                     document.getElementById('k-shift-ms')?.classList.add('kbd-red-static');
                     document.getElementById('k-ctrl-ms')?.classList.add('kbd-red-dim');
                 } else if (hasCtrl) {
                     document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
-                    // Guía en comando de ajuste fino
                     document.getElementById('k-ctrl-ms')?.classList.add('kbd-red-static');
                     document.getElementById('k-shift-ms')?.classList.add('kbd-red-dim');
                 }
@@ -1135,7 +1168,6 @@
                         applyLiveAudioMath(wsTrim, false);
                     } 
                     else {
-                        // CORRECCIÓN: Redondeo exacto a centésimas (.XX) para movimiento del cabezal
                         let current = activeWs.getCurrentTime();
                         let newTime = Math.round((current + (step * direction)) * 100) / 100;
                         if (newTime < trimStartTime) newTime = trimStartTime;
