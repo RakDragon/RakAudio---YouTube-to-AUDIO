@@ -154,6 +154,24 @@
             text-shadow: 0 0 8px #ffffff;
         }
 
+        /* Resaltado rojo estático (sin animación de tecleo) */
+        kbd.kbd-red-static {
+            background-color: #FF422E;
+            border-color: #FF422E;
+            color: #ffffff;
+            box-shadow: 0 3px 0 #FF422E;
+            transform: translateY(0);
+        }
+
+        /* Resaltado tenue/oscuro (sugerencia de combo) */
+        kbd.kbd-red-dim {
+            background-color: rgba(255, 66, 46, 0.25);
+            border-color: #b32d20;
+            color: #ff9d93;
+            box-shadow: 0 3px 0 #882218;
+            transform: translateY(0);
+        }
+
         .desc-text {
             display: inline-block;
             padding: 2px 8px;
@@ -527,20 +545,64 @@
             if (wsTrim) applyLiveAudioMath(wsTrim, false);
         });
 
+        // CORRECCIÓN: Manejo de borrado manual con Backspace en Fade In
         inpFadeIn.addEventListener('input', (e) => {
-            let val = parseFloat(e.target.value);
+            let raw = e.target.value;
+            if (raw === '') {
+                fInG.value = 0;
+                if(wsTrim) {
+                    renderVisualFades('waveformTrimContainer', false);
+                    applyLiveAudioMath(wsTrim, false);
+                }
+                if(isEditedViewActive && wsGlobal) {
+                    renderVisualFades('waveformContainer', true);
+                    applyLiveAudioMath(wsGlobal, true);
+                }
+                return;
+            }
+            let val = parseFloat(raw);
+            if(isNaN(val)) return;
             if(val < 0) val = 0;
             if(val > 10) val = 10;
             fInG.value = val;
-            fInG.dispatchEvent(new Event('input'));
+            if(wsTrim) {
+                renderVisualFades('waveformTrimContainer', false);
+                applyLiveAudioMath(wsTrim, false);
+            }
+            if(isEditedViewActive && wsGlobal) {
+                renderVisualFades('waveformContainer', true);
+                applyLiveAudioMath(wsGlobal, true);
+            }
         });
 
+        // CORRECCIÓN: Manejo de borrado manual con Backspace en Fade Out
         inpFadeOut.addEventListener('input', (e) => {
-            let val = parseFloat(e.target.value);
+            let raw = e.target.value;
+            if (raw === '') {
+                fOutG.value = 0;
+                if(wsTrim) {
+                    renderVisualFades('waveformTrimContainer', false);
+                    applyLiveAudioMath(wsTrim, false);
+                }
+                if(isEditedViewActive && wsGlobal) {
+                    renderVisualFades('waveformContainer', true);
+                    applyLiveAudioMath(wsGlobal, true);
+                }
+                return;
+            }
+            let val = parseFloat(raw);
+            if(isNaN(val)) return;
             if(val < 0) val = 0;
             if(val > 10) val = 10;
             fOutG.value = val;
-            fOutG.dispatchEvent(new Event('input'));
+            if(wsTrim) {
+                renderVisualFades('waveformTrimContainer', false);
+                applyLiveAudioMath(wsTrim, false);
+            }
+            if(isEditedViewActive && wsGlobal) {
+                renderVisualFades('waveformContainer', true);
+                applyLiveAudioMath(wsGlobal, true);
+            }
         });
 
         function renderVisualFades(containerId, isGlobalEdited) {
@@ -925,9 +987,11 @@
 
         const keysPressed = new Set();
 
-        // RESTRUCTURACIÓN DEL RESALTADO DE Shift Y Ctrl
+        // CORRECCIÓN: Lógica para guía visual estática (rojo sólido y rojo tenue)
         function updateKeyboardUI() {
-            document.querySelectorAll('kbd').forEach(k => k.classList.remove('kbd-pressed'));
+            document.querySelectorAll('kbd').forEach(k => {
+                k.classList.remove('kbd-pressed', 'kbd-red-static', 'kbd-red-dim');
+            });
             document.querySelectorAll('.desc-text').forEach(t => t.classList.remove('desc-highlight'));
 
             const isModalOpen = !document.getElementById('trimModal').classList.contains('hidden');
@@ -964,14 +1028,20 @@
                     document.getElementById('t-10s')?.classList.add('desc-highlight');
                 }
             } else {
-                // Al mantener modificadores sin oprimir flechas: aislamos Ctrl+Shift
+                // Estado al presionar modificadores sin direccionales
                 if (hasCtrl && hasShift) {
                     document.getElementById('k-ctrl-ms')?.classList.add('kbd-pressed');
                     document.getElementById('k-shift-ms')?.classList.add('kbd-pressed');
                 } else if (hasShift) {
                     document.getElementById('k-shift-5')?.classList.add('kbd-pressed');
+                    // Guía en comando de ajuste fino
+                    document.getElementById('k-shift-ms')?.classList.add('kbd-red-static');
+                    document.getElementById('k-ctrl-ms')?.classList.add('kbd-red-dim');
                 } else if (hasCtrl) {
                     document.getElementById('k-ctrl-1')?.classList.add('kbd-pressed');
+                    // Guía en comando de ajuste fino
+                    document.getElementById('k-ctrl-ms')?.classList.add('kbd-red-static');
+                    document.getElementById('k-shift-ms')?.classList.add('kbd-red-dim');
                 }
             }
         }
@@ -1035,7 +1105,6 @@
                 const direction = e.code === 'ArrowRight' ? 1 : -1;
                 
                 let step = 10; 
-                // CAMBIO CLAVE: Paso de 0.01 (10ms) para alterar directamente el 2do dígito decimal (.XX)
                 if (e.ctrlKey && e.shiftKey) step = 0.01;
                 else if (e.shiftKey) step = 5;             
                 else if (e.ctrlKey) step = 1;              
@@ -1066,7 +1135,9 @@
                         applyLiveAudioMath(wsTrim, false);
                     } 
                     else {
-                        let newTime = activeWs.getCurrentTime() + (step * direction);
+                        // CORRECCIÓN: Redondeo exacto a centésimas (.XX) para movimiento del cabezal
+                        let current = activeWs.getCurrentTime();
+                        let newTime = Math.round((current + (step * direction)) * 100) / 100;
                         if (newTime < trimStartTime) newTime = trimStartTime;
                         if (newTime > trimEndTime) newTime = trimEndTime;
                         activeWs.setTime(newTime);
@@ -1074,7 +1145,8 @@
                     }
                 } 
                 else {
-                    let newTime = activeWs.getCurrentTime() + (step * direction);
+                    let current = activeWs.getCurrentTime();
+                    let newTime = Math.round((current + (step * direction)) * 100) / 100;
                     if(isEditedViewActive) {
                         if (newTime < trimStartTime) newTime = trimStartTime;
                         if (newTime > trimEndTime) newTime = trimEndTime;
