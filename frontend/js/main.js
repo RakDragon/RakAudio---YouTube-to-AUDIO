@@ -454,6 +454,13 @@ const clientId = Math.random().toString(36).substring(2, 15);
 
             if (wsGlobal) {
                 window.isSwitchingView = true;
+                const btnPlayPause = document.getElementById('btnPlayPause');
+                if (btnPlayPause) {
+                    btnPlayPause.disabled = true;
+                    btnPlayPause.classList.add('opacity-50', 'cursor-not-allowed');
+                    btnPlayPause.textContent = 'Play';
+                }
+
                 const wasPlaying = wsGlobal.isPlaying();
                 const curTime = wsGlobal.getCurrentTime();
                 const currentUrl = wsGlobal.getMediaElement().src;
@@ -476,12 +483,22 @@ const clientId = Math.random().toString(36).substring(2, 15);
                             wsGlobal.setTime(curTime);
                         }
                     }
+
+                    const finalizeSwitch = () => {
+                        window.isSwitchingView = false;
+                        if (btnPlayPause) {
+                            btnPlayPause.disabled = false;
+                            btnPlayPause.classList.remove('opacity-50', 'cursor-not-allowed');
+                            btnPlayPause.textContent = wasPlaying ? 'Pause' : 'Play';
+                        }
+                    };
+
                     if (wasPlaying) {
                         wsGlobal.play().finally(() => {
-                            setTimeout(() => { window.isSwitchingView = false; }, 200);
+                            setTimeout(finalizeSwitch, 200);
                         });
                     } else {
-                        setTimeout(() => { window.isSwitchingView = false; }, 200);
+                        setTimeout(finalizeSwitch, 200);
                     }
                 };
 
