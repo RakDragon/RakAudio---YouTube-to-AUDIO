@@ -1,12 +1,12 @@
-# 🎧 RakAudio - YouTube to AUDIO
+# RakAudio - YouTube to AUDIO
 
 > Herramienta local avanzada para descargar, previsualizar, editar y procesar audios de YouTube en tiempo real con una interfaz moderna y fluida.
 
 ---
 
-## 🚀 Características Principales
+## Características Principales
 
-### 🔴 1. Extracción y Descarga de Audio
+### 1. Extracción y Descarga de Audio
 - **Descarga directa en alta calidad** desde enlaces de YouTube utilizando `yt-dlp` y `FFmpeg`.
 - **Múltiples formatos de exportación**: `MP3`, `M4A`, `WAV`, `FLAC`, `AAC`, `OPUS`.
 - **Selector de calidad**: Desde `128 kbps` hasta `320 kbps` (o bitrate máximo según formato).
@@ -15,7 +15,7 @@
 
 ---
 
-### 🎛️ 2. Previsualización y Ajustes Globales
+### 2. Previsualización y Ajustes Globales
 - **Onda Espectral Interactiva**: Renderizado dinámico de la onda con `WaveSurfer.js v7`.
 - **Alternador de Vista (Original vs. Editado)**:
   - **Original**: Reproducción limpia del audio crudo extraído con su propio control de volumen independiente.
@@ -25,14 +25,14 @@
 
 ---
 
-### 🛠️ 3. Panel "MÁS HERRAMIENTAS" (Edición Avanzada)
-- **✂️ Recorte Preciso de Audio**:
+### 3. Panel "MÁS HERRAMIENTAS" (Edición Avanzada)
+- **Recorte Preciso de Audio**:
   - Definición de límites mediante tiradores visuales izquierdo y derecho sobre el espectrograma.
-  - Botón **"Escuchar Selección"** con barra de progreso roja integrada en el fondo del botón (*fill progresivo* de izquierda a derecha).
-- **📈 Efectos de Fade In / Fade Out**:
+  - Botón **"Escuchar Selección"** con barra de progreso integrada en el fondo del botón (*fill progresivo* de izquierda a derecha).
+- **Efectos de Fade In / Fade Out**:
   - Transiciones suaves de entrada y salida configurables en segundos.
-  - Sombra y curva de decoloración visual roja proyectada directamente sobre la onda espectral.
-- **🔊 Procesamiento en Vivo**:
+  - Sombra y curva de decoloración visual proyectada directamente sobre la onda espectral.
+- **Procesamiento en Vivo**:
   - **Ajuste de Volumen Manual**: Incremento o atenuación de 0% a 200%.
   - **Velocidad (Tempo)**: Variación en tiempo real desde 0.25x hasta 4.00x.
   - **Cambio de Tono (Pitch)**: Ajuste de ±12 semitonos conservando o ajustando el tempo.
@@ -41,7 +41,7 @@
 
 ---
 
-### ⌨️ 4. Atajos de Teclado y Accesibilidad
+### 4. Atajos de Teclado y Accesibilidad
 
 | Tecla / Combinación | Acción |
 | :--- | :--- |
@@ -57,13 +57,13 @@
 
 ---
 
-### 📜 5. Historial de Descargas
+### 5. Historial de Descargas
 - Guardado automático de las sesiones recientes en `localStorage`.
 - Opción para recargar rápidamente videos previos o limpiar el historial.
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 YT-to-Audio/
@@ -84,14 +84,14 @@ YT-to-Audio/
 
 ---
 
-## 💻 Requisitos del Sistema
+## Requisitos del Sistema
 
 - **Python 3.10+**
 - **FFmpeg** (Debe estar instalado y agregado a las variables de entorno del sistema / `PATH`).
 
 ---
 
-## ⚙️ Instalación
+## Instalación
 
 1. Clona el repositorio o descarga los archivos.
 2. Crea e inicializa el entorno virtual de Python dentro de la carpeta `backend`:
@@ -117,7 +117,7 @@ pip install -r requirements.txt
 
 ---
 
-## ⏩ Modo de Uso
+## Modo de Uso
 
 **1. Iniciar el Backend (Python / Flask):**
 ```bash
@@ -138,7 +138,7 @@ Abre `http://localhost:8000` en tu navegador web.
 
 ---
 
-## 📝 Notas
+## Notas
 - **Puerto del Backend**: `5050`
 - **Puerto del Frontend**: `8000`
 - **Descargas Temporales**: Los archivos en `temp_audio/` y `processed_audio/` se gestionan localmente en el servidor backend.
