@@ -78,8 +78,6 @@ YT-to-Audio/
 │   │   └── styles.css      # Estilos personalizados, temas oscuros y scrollbars
 │   └── js/
 │       └── main.js         # Lógica interactiva, WaveSurfer v7 y Web Audio API
-├── scripts/
-│   └── start.bat           # Script para iniciar backend + frontend automáticamente
 ├── .gitignore
 └── README.md
 ```
@@ -121,11 +119,6 @@ pip install -r requirements.txt
 
 ## ⏩ Modo de Uso
 
-### Opción 1: Inicio Rápido (Windows)
-Haz doble clic en el archivo `scripts/start.bat`. Este script ejecutará automáticamente el servidor backend y la interfaz web en tu navegador.
-
-### Opción 2: Inicio Manual
-
 **1. Iniciar el Backend (Python / Flask):**
 ```bash
 cd backend
@@ -140,7 +133,8 @@ python -m http.server 8000
 ```
 *(Disponible en `http://localhost:8000`)*
 
-3. Abre **`http://localhost:8000`** en tu navegador web.
+**3. Abrir en el navegador:**
+Abre `http://localhost:8000` en tu navegador web.
 
 ---
 
