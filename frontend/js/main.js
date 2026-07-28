@@ -446,6 +446,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 
                 document.getElementById('waveformContainer').querySelectorAll('.visual-fx').forEach(el => el.remove());
             }
+            updateSpectrumFlipUI();
             updateTimeDisplay();
         }
 
@@ -581,6 +582,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 currentVideoId = data.id;
                 currentExt = data.ext;
                 audioUrlGlobal = data.audioUrl;
+                prepareReversedAudioUrl(data.audioUrl);
 
                 document.getElementById('metaTitle').textContent = data.title;
                 document.getElementById('metaChannel').textContent = data.uploader;
@@ -1065,45 +1067,136 @@ const clientId = Math.random().toString(36).substring(2, 15);
             }
         });
 
+        let reversedAudioUrl = null;
+
+        function audioBufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1;
+            const bitDepth = 16;
+            
+            let result;
+            if (numChannels === 2) {
+                result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+            } else {
+                result = buffer.getChannelData(0);
+            }
+            
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            const dataByteCount = result.length * bytesPerSample;
+            const headerByteCount = 44;
+            const totalByteCount = headerByteCount + dataByteCount;
+            
+            const arrayBuffer = new ArrayBuffer(totalByteCount);
+            const view = new DataView(arrayBuffer);
+
+            function writeString(v, offset, str) {
+                for (let i = 0; i < str.length; i++) {
+                    v.setUint8(offset + i, str.charCodeAt(i));
+                }
+            }
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataByteCount, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * blockAlign, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataByteCount, true);
+
+            let offset = 44;
+            for (let i = 0; i < result.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, result[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+
+            return new Blob([arrayBuffer], { type: 'audio/wav' });
+        }
+
+        function interleave(inputL, inputR) {
+            const length = inputL.length + inputR.length;
+            const result = new Float32Array(length);
+            let index = 0;
+            let inputIndex = 0;
+            while (index < length) {
+                result[index++] = inputL[inputIndex];
+                result[index++] = inputR[inputIndex];
+                inputIndex++;
+            }
+            return result;
+        }
+
+        async function prepareReversedAudioUrl(url) {
+            try {
+                const res = await fetch(url);
+                const arrayBuf = await res.arrayBuffer();
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuf = await ctx.decodeAudioData(arrayBuf);
+                const revBuf = getReversedAudioBuffer(audioBuf);
+                if (revBuf) {
+                    const blob = audioBufferToWav(revBuf);
+                    if (reversedAudioUrl) URL.revokeObjectURL(reversedAudioUrl);
+                    reversedAudioUrl = URL.createObjectURL(blob);
+                }
+            } catch (e) {
+                console.error("Error al preparar audio invertido:", e);
+            }
+        }
+
+        function updateSpectrumFlipUI() {
+            const isReverse = document.getElementById('chkReverseAudio')?.checked || false;
+            const wfTrim = document.getElementById('waveformTrim');
+            const wfGlobal = document.getElementById('waveform');
+            
+            if (wfTrim) wfTrim.classList.toggle('spectrum-reversed', isReverse);
+            if (wfGlobal) {
+                if (isEditedViewActive && isReverse) {
+                    wfGlobal.classList.add('spectrum-reversed');
+                } else {
+                    wfGlobal.classList.remove('spectrum-reversed');
+                }
+            }
+        }
+
         function toggleAudioReverseLive() {
             const isReverse = document.getElementById('chkReverseAudio')?.checked || false;
+            updateSpectrumFlipUI();
+
             const targetWs = wsTrim || wsGlobal;
             if (!targetWs) return;
 
             const wasPlaying = targetWs.isPlaying();
             const curTime = targetWs.getCurrentTime();
+            const targetUrl = (isReverse && reversedAudioUrl) ? reversedAudioUrl : audioUrlGlobal;
 
-            if (!originalAudioBuffer && targetWs.getDecodedData()) {
-                originalAudioBuffer = targetWs.getDecodedData();
+            if (wsTrim) {
+                wsTrim.load(targetUrl);
+            }
+            if (wsGlobal && isEditedViewActive) {
+                wsGlobal.load(targetUrl);
             }
 
-            if (originalAudioBuffer) {
-                if (isReverse) {
-                    const revBuf = getReversedAudioBuffer(originalAudioBuffer);
-                    if (revBuf) {
-                        if (wsTrim) wsTrim.loadAudioBuffer(revBuf);
-                        if (wsGlobal) wsGlobal.loadAudioBuffer(revBuf);
-                    }
-                } else {
-                    if (wsTrim) wsTrim.loadAudioBuffer(originalAudioBuffer);
-                    if (wsGlobal) wsGlobal.loadAudioBuffer(originalAudioBuffer);
+            setTimeout(() => {
+                const dur = videoDuration || 1;
+                const newTime = Math.max(0, Math.min(dur, dur - curTime));
+                if (wsTrim) {
+                    wsTrim.setTime(newTime);
+                    applyLiveAudioMath(wsTrim, false);
+                    if (wasPlaying) wsTrim.play();
                 }
-
-                setTimeout(() => {
-                    const dur = videoDuration || 1;
-                    const newTime = Math.max(0, Math.min(dur, dur - curTime));
-                    if (wsTrim) {
-                        wsTrim.setTime(newTime);
-                        applyLiveAudioMath(wsTrim, false);
-                        if (wasPlaying) wsTrim.play();
-                    }
-                    if (wsGlobal) {
-                        wsGlobal.setTime(newTime);
-                        applyLiveAudioMath(wsGlobal, true);
-                        if (wasPlaying) wsGlobal.play();
-                    }
-                }, 80);
-            }
+                if (wsGlobal && isEditedViewActive) {
+                    wsGlobal.setTime(newTime);
+                    applyLiveAudioMath(wsGlobal, true);
+                    if (wasPlaying) wsGlobal.play();
+                }
+            }, 120);
         }
 
         const tempoSlider = document.getElementById('tempoSlider');

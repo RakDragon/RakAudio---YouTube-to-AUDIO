@@ -244,3 +244,9 @@ input[type=range] {
             scrollbar-width: thin;
             scrollbar-color: #FF422E #1f1f1f;
         }
+
+        /* FLIP HORIZONTAL DEL ESPECTRO DE AUDIO EN REVERSE */
+        .spectrum-reversed canvas,
+        .spectrum-reversed svg {
+            transform: scaleX(-1) !important;
+        }
