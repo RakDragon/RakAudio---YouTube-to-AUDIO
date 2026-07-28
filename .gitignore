@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+env/
+.venv/
+
+# Audio generado en tiempo de ejecución
+backend/temp_audio/*
+!backend/temp_audio/.gitkeep
+backend/processed_audio/*
+!backend/processed_audio/.gitkeep
+
+# Editor / SO
+.DS_Store
+Thumbs.db
