@@ -189,7 +189,32 @@ const clientId = Math.random().toString(36).substring(2, 15);
             }
         }
 
+        let originalAudioBuffer = null;
+
+        function getReversedAudioBuffer(audioBuffer) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const numChannels = audioBuffer.numberOfChannels;
+                const length = audioBuffer.length;
+                const sampleRate = audioBuffer.sampleRate;
+                const reversed = ctx.createBuffer(numChannels, length, sampleRate);
+                
+                for (let c = 0; c < numChannels; c++) {
+                    const src = audioBuffer.getChannelData(c);
+                    const dest = reversed.getChannelData(c);
+                    for (let i = 0; i < length; i++) {
+                        dest[i] = src[length - 1 - i];
+                    }
+                }
+                return reversed;
+            } catch (e) {
+                console.error("Error al crear buffer invertido:", e);
+                return null;
+            }
+        }
+
         function applyLiveAudioMath(ws, isGlobalEdited) {
+            if (!ws) return;
             let currentTime = ws.getCurrentTime();
             let start = isGlobalEdited ? trimStartTime : (ws === wsTrim ? trimStartTime : 0);
             let end = isGlobalEdited ? trimEndTime : (ws === wsTrim ? trimEndTime : videoDuration);
@@ -205,6 +230,12 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 maxVol = globalVolValue;
             }
 
+            // Normalización de volumen EBU R128 en vivo (+3.5dB de ganancia)
+            const isNormalize = document.getElementById('chkNormalizeVolModal')?.checked || false;
+            if (isNormalize && (ws === wsTrim || isGlobalEdited)) {
+                maxVol *= 1.45;
+            }
+
             let currentVol = maxVol;
 
             if (inSec > 0 && t < inSec && t >= 0) {
@@ -214,8 +245,22 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 currentVol = maxVol * (timeLeft / outSec);
             }
 
-            currentVol = Math.max(0, Math.min(maxVol, currentVol));
+            currentVol = Math.max(0, Math.min(2.0, currentVol));
             ws.setVolume(currentVol);
+
+            // Velocidad (Tempo) y Tono (Pitch) en vivo
+            const tempoVal = parseFloat(document.getElementById('tempoSlider')?.value || 1.0);
+            const pitchVal = parseInt(document.getElementById('pitchSlider')?.value || 0);
+
+            const pitchFactor = Math.pow(2, pitchVal / 12);
+            const effectiveRate = Math.max(0.25, Math.min(4.0, tempoVal * pitchFactor));
+            const preservePitch = (pitchVal === 0);
+
+            try {
+                ws.setPlaybackRate(effectiveRate, preservePitch);
+            } catch (e) {
+                // Fallback si la tasa excede límites del navegador
+            }
         }
 
         chkAdjustVol.addEventListener('change', (e) => {
@@ -1020,11 +1065,54 @@ const clientId = Math.random().toString(36).substring(2, 15);
             }
         });
 
+        function toggleAudioReverseLive() {
+            const isReverse = document.getElementById('chkReverseAudio')?.checked || false;
+            const targetWs = wsTrim || wsGlobal;
+            if (!targetWs) return;
+
+            const wasPlaying = targetWs.isPlaying();
+            const curTime = targetWs.getCurrentTime();
+
+            if (!originalAudioBuffer && targetWs.getDecodedData()) {
+                originalAudioBuffer = targetWs.getDecodedData();
+            }
+
+            if (originalAudioBuffer) {
+                if (isReverse) {
+                    const revBuf = getReversedAudioBuffer(originalAudioBuffer);
+                    if (revBuf) {
+                        if (wsTrim) wsTrim.loadAudioBuffer(revBuf);
+                        if (wsGlobal) wsGlobal.loadAudioBuffer(revBuf);
+                    }
+                } else {
+                    if (wsTrim) wsTrim.loadAudioBuffer(originalAudioBuffer);
+                    if (wsGlobal) wsGlobal.loadAudioBuffer(originalAudioBuffer);
+                }
+
+                setTimeout(() => {
+                    const dur = videoDuration || 1;
+                    const newTime = Math.max(0, Math.min(dur, dur - curTime));
+                    if (wsTrim) {
+                        wsTrim.setTime(newTime);
+                        applyLiveAudioMath(wsTrim, false);
+                        if (wasPlaying) wsTrim.play();
+                    }
+                    if (wsGlobal) {
+                        wsGlobal.setTime(newTime);
+                        applyLiveAudioMath(wsGlobal, true);
+                        if (wasPlaying) wsGlobal.play();
+                    }
+                }, 80);
+            }
+        }
+
         const tempoSlider = document.getElementById('tempoSlider');
         const lblTempoValue = document.getElementById('lblTempoValue');
         if (tempoSlider && lblTempoValue) {
             tempoSlider.addEventListener('input', (e) => {
                 lblTempoValue.textContent = `${parseFloat(e.target.value).toFixed(2)}x`;
+                if (wsTrim) applyLiveAudioMath(wsTrim, false);
+                if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
                 checkIfStateChanged();
             });
         }
@@ -1035,18 +1123,27 @@ const clientId = Math.random().toString(36).substring(2, 15);
             pitchSlider.addEventListener('input', (e) => {
                 const val = parseInt(e.target.value);
                 lblPitchValue.textContent = `${val > 0 ? '+' : ''}${val} semitonos`;
+                if (wsTrim) applyLiveAudioMath(wsTrim, false);
+                if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
                 checkIfStateChanged();
             });
         }
 
         const chkNormalizeVolModal = document.getElementById('chkNormalizeVolModal');
         if (chkNormalizeVolModal) {
-            chkNormalizeVolModal.addEventListener('change', () => checkIfStateChanged());
+            chkNormalizeVolModal.addEventListener('change', () => {
+                if (wsTrim) applyLiveAudioMath(wsTrim, false);
+                if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
+                checkIfStateChanged();
+            });
         }
 
         const chkReverseAudio = document.getElementById('chkReverseAudio');
         if (chkReverseAudio) {
-            chkReverseAudio.addEventListener('change', () => checkIfStateChanged());
+            chkReverseAudio.addEventListener('change', () => {
+                toggleAudioReverseLive();
+                checkIfStateChanged();
+            });
         }
 
         const tabTrim = document.getElementById('tabTrim');
