@@ -46,6 +46,8 @@ input[type=range] {
         #btnPlayTrim {
             position: relative;
             overflow: hidden;
+            width: 210px;
+            min-width: 210px;
         }
 
         #btnPlayTrim::before {

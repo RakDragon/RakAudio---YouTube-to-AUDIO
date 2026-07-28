@@ -32,11 +32,13 @@
             scrollbar-color: #FF422E #1f1f1f !important;
         }
 
-        /* BOTÓN ESCUCHAR SELECCIÓN - BARRA DE PROGRESO DE LLENADO */
+        /* BOTÓN ESCUCHAR SELECCIÓN - BARRA DE PROGRESO DE LLENADO Y ANCHO FIJO */
         #btnPlayTrim {
             position: relative !important;
             overflow: hidden !important;
             background-color: #333333 !important;
+            width: 210px !important;
+            min-width: 210px !important;
         }
 
         #btnPlayTrim::before {
@@ -307,7 +309,7 @@
                 </div>
 
                 <div class="flex justify-between items-center mt-4 border-t border-[#444] pt-4 flex-shrink-0">
-                    <button id="btnPlayTrim" class="bg-[#444] hover:bg-[#555] px-6 py-2 rounded flex items-center justify-center text-white transition font-bold shadow-md">
+                    <button id="btnPlayTrim" class="bg-[#444] hover:bg-[#555] w-[210px] min-w-[210px] px-6 py-2 rounded flex items-center justify-center text-white transition font-bold shadow-md">
                         <span id="lblPlayTrim">Escuchar Selección</span>
                     </button>
                     <button id="btnApplyTrim" class="bg-[#FF422E] px-8 py-2 rounded font-bold text-white transition opacity-40 cursor-not-allowed pointer-events-none" disabled>
