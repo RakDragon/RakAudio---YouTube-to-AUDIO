@@ -12,6 +12,8 @@ backend/temp_audio/*
 !backend/temp_audio/.gitkeep
 backend/processed_audio/*
 !backend/processed_audio/.gitkeep
+temp_audio/
+processed_audio/
 
 # Editor / SO
 .DS_Store
