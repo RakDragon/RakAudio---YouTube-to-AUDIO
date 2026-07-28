@@ -224,7 +224,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
             
             let maxVol;
             if (ws === wsTrim || isGlobalEdited) {
-                maxVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
+                maxVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : 1.0;
             } else {
                 maxVol = globalVolValue;
             }
@@ -426,7 +426,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 volSlider.disabled = true;
                 volSlider.classList.add('opacity-50', 'cursor-not-allowed');
                 
-                const editVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : globalVolValue;
+                const editVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : 1.0;
                 volSlider.max = "2"; 
                 volSlider.value = editVol;
                 lblVolGlobal.textContent = `${Math.round(editVol * 100)}%`;
