@@ -44,28 +44,34 @@ input[type=range] {
         }
 
         #btnPlayTrim {
-            position: relative;
-            overflow: hidden;
-            width: 210px;
-            min-width: 210px;
+            position: relative !important;
+            overflow: hidden !important;
+            background-color: #444444 !important;
+            width: 210px !important;
+            min-width: 210px !important;
+            z-index: 1 !important;
+        }
+
+        #btnPlayTrim:hover {
+            background-color: #555555 !important;
         }
 
         #btnPlayTrim::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: var(--trim-progress, 0%);
-            background: #FF422E;
-            transition: width 0.08s linear;
-            z-index: 0;
+            content: "" !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            width: var(--trim-progress, 0%) !important;
+            background-color: #FF422E !important;
+            transition: width 0.08s linear !important;
+            z-index: 0 !important;
         }
 
-        .loading-bg>*,
-        #btnPlayTrim>* {
-            position: relative;
-            z-index: 1;
+        .loading-bg > *,
+        #btnPlayTrim > * {
+            position: relative !important;
+            z-index: 1 !important;
         }
 
         /* LÍNEA NEGRA REAL DE CORTE (|) */
@@ -222,27 +228,27 @@ input[type=range] {
 
         /* PERSONALIZACIÓN DE SCROLLBAR (ROJO #FF422E Y FONDO OSCURO) */
         ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            width: 8px !important;
+            height: 8px !important;
         }
 
         ::-webkit-scrollbar-track {
-            background: #1f1f1f;
-            border-radius: 4px;
+            background: #1f1f1f !important;
+            border-radius: 4px !important;
         }
 
         ::-webkit-scrollbar-thumb {
-            background-color: #FF422E;
-            border-radius: 4px;
+            background-color: #FF422E !important;
+            border-radius: 4px !important;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background-color: #d43726;
+            background-color: #d43726 !important;
         }
 
         * {
-            scrollbar-width: thin;
-            scrollbar-color: #FF422E #1f1f1f;
+            scrollbar-width: thin !important;
+            scrollbar-color: #FF422E #1f1f1f !important;
         }
 
         /* FLIP HORIZONTAL DEL ESPECTRO DE AUDIO EN REVERSE */

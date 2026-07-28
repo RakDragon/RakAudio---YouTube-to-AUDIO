@@ -9,55 +9,8 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=2">
     <style>
-        /* SCROLLBAR PERSONALIZADA */
-        ::-webkit-scrollbar {
-            width: 8px !important;
-            height: 8px !important;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1f1f1f !important;
-            border-radius: 4px !important;
-        }
-        ::-webkit-scrollbar-thumb {
-            background-color: #FF422E !important;
-            border-radius: 4px !important;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background-color: #d43726 !important;
-        }
-        * {
-            scrollbar-width: thin !important;
-            scrollbar-color: #FF422E #1f1f1f !important;
-        }
-
-        /* BOTÓN ESCUCHAR SELECCIÓN - BARRA DE PROGRESO DE LLENADO Y ANCHO FIJO */
-        #btnPlayTrim {
-            position: relative !important;
-            overflow: hidden !important;
-            background-color: #333333 !important;
-            width: 210px !important;
-            min-width: 210px !important;
-        }
-
-        #btnPlayTrim::before {
-            content: "" !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            bottom: 0 !important;
-            width: var(--trim-progress, 0%) !important;
-            background-color: #FF422E !important;
-            transition: width 0.05s linear !important;
-            z-index: 1 !important;
-        }
-
-        #btnPlayTrim > * {
-            position: relative !important;
-            z-index: 2 !important;
-        }
-
         /* FLIP HORIZONTAL DEL ESPECTRO DE AUDIO EN REVERSE */
         .spectrum-reversed canvas,
         .spectrum-reversed svg {
@@ -315,7 +268,7 @@
                 </div>
 
                 <div class="flex justify-between items-center mt-4 border-t border-[#444] pt-4 flex-shrink-0">
-                    <button id="btnPlayTrim" class="bg-[#444] hover:bg-[#555] w-[210px] min-w-[210px] px-6 py-2 rounded flex items-center justify-center text-white transition font-bold shadow-md">
+                    <button id="btnPlayTrim" class="px-6 py-2 rounded flex items-center justify-center text-white transition font-bold shadow-md">
                         <span id="lblPlayTrim">Escuchar Selección</span>
                     </button>
                     <button id="btnApplyTrim" class="bg-[#FF422E] px-8 py-2 rounded font-bold text-white transition opacity-40 cursor-not-allowed pointer-events-none" disabled>
