@@ -454,14 +454,13 @@ const clientId = Math.random().toString(36).substring(2, 15);
 
             if (wsGlobal) {
                 window.isSwitchingView = true;
+                const wasPlaying = wsGlobal.isPlaying();
                 const btnPlayPause = document.getElementById('btnPlayPause');
                 if (btnPlayPause) {
                     btnPlayPause.disabled = true;
                     btnPlayPause.classList.add('opacity-50', 'cursor-not-allowed');
-                    btnPlayPause.textContent = 'Play';
+                    btnPlayPause.textContent = wasPlaying ? 'Pause' : 'Play';
                 }
-
-                const wasPlaying = wsGlobal.isPlaying();
                 const curTime = wsGlobal.getCurrentTime();
                 const currentUrl = wsGlobal.getMediaElement().src;
                 const needsUrlSwitch = !currentUrl.endsWith(targetUrl) && currentUrl !== targetUrl;
