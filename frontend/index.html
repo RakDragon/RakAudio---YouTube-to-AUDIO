@@ -9,7 +9,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=2">
+    <link rel="stylesheet" href="css/styles.css?v=3">
     <style>
         /* FLIP HORIZONTAL DEL ESPECTRO DE AUDIO EN REVERSE */
         .spectrum-reversed canvas,
@@ -60,6 +60,10 @@
 
             <div id="waveformContainer" class="w-full bg-[#1f1f1f] rounded border border-[#444] h-24 relative overflow-hidden">
                 <div id="waveform" class="w-full h-full"></div>
+                <div id="waveformLoadingOverlay" class="hidden">
+                    <div class="spinner"></div>
+                    <p>Decodificando audio...</p>
+                </div>
             </div>
 
             <div class="flex justify-between text-sm text-white opacity-80 mt-1 mb-4 font-mono px-1">

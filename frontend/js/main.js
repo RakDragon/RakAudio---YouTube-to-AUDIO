@@ -466,44 +466,54 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 const needsUrlSwitch = !currentUrl.endsWith(targetUrl) && currentUrl !== targetUrl;
 
                 const applyState = () => {
-                    if (edited) {
-                        let newTime = curTime;
-                        if (newTime < trimStartTime || newTime > trimEndTime) {
-                            newTime = trimStartTime;
+                    // Use rAF to let the browser settle the audio graph before applying changes,
+                    // preventing the audible glitch/stutter on view switch.
+                    requestAnimationFrame(() => {
+                        if (edited) {
+                            let newTime = curTime;
+                            if (newTime < trimStartTime || newTime > trimEndTime) {
+                                newTime = trimStartTime;
+                            }
+                            if (needsUrlSwitch || newTime !== curTime) {
+                                wsGlobal.setTime(newTime);
+                            }
+                            applyLiveAudioMath(wsGlobal, true);
+                        } else {
+                            // Reset rate/vol before playing so there's no audio jump
+                            try { wsGlobal.setPlaybackRate(1.0, true); } catch(e){}
+                            wsGlobal.setVolume(globalVolValue);
+                            if (needsUrlSwitch) {
+                                wsGlobal.setTime(curTime);
+                            }
                         }
-                        if (needsUrlSwitch || newTime !== curTime) {
-                            wsGlobal.setTime(newTime);
-                        }
-                        applyLiveAudioMath(wsGlobal, true);
-                    } else {
-                        wsGlobal.setVolume(globalVolValue);
-                        try { wsGlobal.setPlaybackRate(1.0, true); } catch(e){}
-                        if (needsUrlSwitch) {
-                            wsGlobal.setTime(curTime);
-                        }
-                    }
 
-                    const finalizeSwitch = () => {
-                        window.isSwitchingView = false;
-                        if (btnPlayPause) {
-                            btnPlayPause.disabled = false;
-                            btnPlayPause.classList.remove('opacity-50', 'cursor-not-allowed');
-                            btnPlayPause.textContent = wasPlaying ? 'Pause' : 'Play';
-                        }
-                    };
+                        const finalizeSwitch = () => {
+                            window.isSwitchingView = false;
+                            if (btnPlayPause) {
+                                btnPlayPause.disabled = false;
+                                btnPlayPause.classList.remove('opacity-50', 'cursor-not-allowed');
+                                btnPlayPause.textContent = wasPlaying ? 'Pause' : 'Play';
+                            }
+                        };
 
-                    if (wasPlaying) {
-                        wsGlobal.play().finally(() => {
-                            setTimeout(finalizeSwitch, 200);
-                        });
-                    } else {
-                        setTimeout(finalizeSwitch, 200);
-                    }
+                        if (wasPlaying) {
+                            wsGlobal.play().finally(() => {
+                                requestAnimationFrame(finalizeSwitch);
+                            });
+                        } else {
+                            requestAnimationFrame(finalizeSwitch);
+                        }
+                    });
                 };
 
                 if (needsUrlSwitch) {
                     if (wasPlaying) wsGlobal.pause();
-                    wsGlobal.once('decode', applyState);
+                    // Show overlay while re-decoding (reverse URL switch)
+                    showWaveformLoading();
+                    wsGlobal.once('decode', () => {
+                        hideWaveformLoading();
+                        applyState();
+                    });
                     wsGlobal.load(targetUrl);
                 } else {
                     applyState();
@@ -550,8 +560,16 @@ const clientId = Math.random().toString(36).substring(2, 15);
             statusMsg.className = `text-sm mt-2 block z-10 font-mono text-white ${isError ? 'font-bold text-[#FF422E]' : ''}`;
         };
 
+        const waveformOverlay = document.getElementById('waveformLoadingOverlay');
+        const showWaveformLoading = () => { if (waveformOverlay) waveformOverlay.classList.remove('hidden'); };
+        const hideWaveformLoading = () => { if (waveformOverlay) waveformOverlay.classList.add('hidden'); };
+
         const initWaveSurfer = () => {
             if (wsGlobal) wsGlobal.destroy();
+
+            // Show spinner overlay immediately — decodeAudioData blocks the main thread
+            showWaveformLoading();
+
             wsGlobal = WaveSurfer.create({
                 container: '#waveform',
                 waveColor: '#777777',
@@ -572,6 +590,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
             });
 
             wsGlobal.on('ready', () => {
+                hideWaveformLoading();
                 updateTimeDisplay();
                 wsGlobal.setVolume(globalVolValue);
                 
@@ -582,6 +601,11 @@ const clientId = Math.random().toString(36).substring(2, 15);
                 showStatus('¡Audio cargado y listo!');
                 setTimeout(() => { document.getElementById('statusMsg').classList.add('hidden'); }, 3000);
             });
+
+            wsGlobal.on('error', () => {
+                hideWaveformLoading();
+            });
+
             wsGlobal.on('audioprocess', () => {
                 updateTimeDisplay();
                 if(isEditedViewActive) {
@@ -725,7 +749,7 @@ const clientId = Math.random().toString(36).substring(2, 15);
             } catch (err) {
                 if (currentEvtSource) currentEvtSource.close();
                 extractContainer.style.setProperty('--progress', '0%');
-                showStatus(`Error de conexión con el servidor Python.`, true);
+                showStatus(err.message || `Error de conexión con el servidor Python.`, true);
                 console.error(err);
             }
         });

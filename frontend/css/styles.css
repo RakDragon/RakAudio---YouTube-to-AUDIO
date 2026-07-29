@@ -256,3 +256,43 @@ input[type=range] {
         .spectrum-reversed svg {
             transform: scaleX(-1) !important;
         }
+
+        /* OVERLAY DE CARGA DE WAVEFORM */
+        #waveformLoadingOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(26, 26, 26, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            z-index: 50;
+            border-radius: inherit;
+            backdrop-filter: blur(2px);
+            transition: opacity 0.3s ease;
+        }
+
+        #waveformLoadingOverlay.hidden {
+            display: none;
+        }
+
+        #waveformLoadingOverlay .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(255, 66, 46, 0.25);
+            border-top-color: #FF422E;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        #waveformLoadingOverlay p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: monospace;
+            letter-spacing: 0.05em;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
