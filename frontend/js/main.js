@@ -37,6 +37,7 @@ let lastAppliedState = {
     start: 0, end: 0, fadeIn: 0, fadeOut: 0,
     adjustVol: false, volLevel: 1.0, tempo: 1.0,
     normalizeVol: false, pitch: 0, reverse: false,
+    roomEffects: false, reverbMix: 0, reverbSize: 50, echoDelay: 0, echoFeedback: 20
 };
 
 // ── Cached DOM references ─────────────────────────────────────────────────────
@@ -80,6 +81,18 @@ const pitchSlider          = document.getElementById('pitchSlider');
 const lblPitchValue        = document.getElementById('lblPitchValue');
 const chkNormalizeVolModal = document.getElementById('chkNormalizeVolModal');
 const chkReverseAudio      = document.getElementById('chkReverseAudio');
+
+// Room Effects controls
+const chkRoomEffects       = document.getElementById('chkRoomEffects');
+const roomEffectsControls  = document.getElementById('roomEffectsControls');
+const reverbMixSlider      = document.getElementById('reverbMixSlider');
+const reverbSizeSlider     = document.getElementById('reverbSizeSlider');
+const echoDelaySlider      = document.getElementById('echoDelaySlider');
+const echoFeedbackSlider   = document.getElementById('echoFeedbackSlider');
+const lblReverbMix         = document.getElementById('lblReverbMix');
+const lblReverbSize        = document.getElementById('lblReverbSize');
+const lblEchoDelay         = document.getElementById('lblEchoDelay');
+const lblEchoFeedback      = document.getElementById('lblEchoFeedback');
 
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
@@ -288,6 +301,11 @@ function readEditorState() {
         normalizeVol: chkNormalizeVolModal      ? chkNormalizeVolModal.checked : false,
         pitch:        parseInt(pitchSlider      ? pitchSlider.value        : 0, 10),
         reverse:      chkReverseAudio           ? chkReverseAudio.checked  : false,
+        roomEffects:  chkRoomEffects            ? chkRoomEffects.checked   : false,
+        reverbMix:    parseInt(reverbMixSlider  ? reverbMixSlider.value    : 0, 10),
+        reverbSize:   parseInt(reverbSizeSlider ? reverbSizeSlider.value   : 50, 10),
+        echoDelay:    parseFloat(echoDelaySlider? echoDelaySlider.value    : 0),
+        echoFeedback: parseInt(echoFeedbackSlider? echoFeedbackSlider.value: 20, 10)
     };
 }
 
@@ -300,6 +318,15 @@ function resetEditorControls() {
     if (pitchSlider)  { pitchSlider.value  = 0;   if (lblPitchValue) lblPitchValue.textContent = '0 semitonos'; }
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = false;
     if (chkReverseAudio)      chkReverseAudio.checked      = false;
+
+    if (chkRoomEffects) chkRoomEffects.checked = false;
+    if (reverbMixSlider) { reverbMixSlider.value = 0; if (lblReverbMix) lblReverbMix.textContent = '0%'; }
+    if (reverbSizeSlider) { reverbSizeSlider.value = 50; if (lblReverbSize) lblReverbSize.textContent = '50%'; }
+    if (echoDelaySlider) { echoDelaySlider.value = 0; if (lblEchoDelay) lblEchoDelay.textContent = '0.0s'; }
+    if (echoFeedbackSlider) { echoFeedbackSlider.value = 20; if (lblEchoFeedback) lblEchoFeedback.textContent = '20%'; }
+    if (roomEffectsControls) {
+        roomEffectsControls.classList.add('opacity-50', 'pointer-events-none');
+    }
 
     fInG.value  = 0; lblFadeInG.textContent  = '0s';
     fOutG.value = 0; lblFadeOutG.textContent = '0s';
@@ -329,7 +356,14 @@ function checkIfStateChanged() {
         Math.abs(cur.tempo - (prev.tempo || 1.0)) < 0.01 &&
         cur.normalizeVol === (prev.normalizeVol || false) &&
         cur.pitch   === (prev.pitch   || 0)     &&
-        cur.reverse === (prev.reverse || false);
+        cur.reverse === (prev.reverse || false) &&
+        cur.roomEffects === (prev.roomEffects || false) &&
+        (!cur.roomEffects || (
+            cur.reverbMix === (prev.reverbMix || 0) &&
+            cur.reverbSize === (prev.reverbSize || 50) &&
+            Math.abs(cur.echoDelay - (prev.echoDelay || 0)) < 0.01 &&
+            cur.echoFeedback === (prev.echoFeedback || 20)
+        ));
 
     btnApplyTrim.disabled = isSame;
     btnApplyTrim.classList.toggle('opacity-40',          isSame);
@@ -377,8 +411,102 @@ function updateTrimProgressUI() {
  * Called from the rAF-throttled audioprocess callback — must stay cheap.
  * All element references are cached at module level (no getElementById calls).
  */
+// ── Web Audio API for Room Effects ──────────────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const roomEffectsMap = new WeakMap();
+
+function createReverbImpulse(duration, decay) {
+    const length = audioCtx.sampleRate * duration;
+    const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
+    const left = impulse.getChannelData(0);
+    const right = impulse.getChannelData(1);
+    for (let i = 0; i < length; i++) {
+        const factor = Math.pow(1 - i / length, decay);
+        left[i] = (Math.random() * 2 - 1) * factor;
+        right[i] = (Math.random() * 2 - 1) * factor;
+    }
+    return impulse;
+}
+
+function attachRoomEffects(ws) {
+    if (!ws) return;
+    const mediaElement = ws.getMediaElement();
+    if (roomEffectsMap.has(mediaElement)) return;
+    
+    // WaveSurfer automatically loads the audio into the media element.
+    // By creating this source, we hijack the output.
+    const source = audioCtx.createMediaElementSource(mediaElement);
+    
+    const reverbNode = audioCtx.createConvolver();
+    const reverbGain = audioCtx.createGain();
+    const echoDelay = audioCtx.createDelay(3.0);
+    const echoFeedback = audioCtx.createGain();
+    const echoGain = audioCtx.createGain();
+    const dryGain = audioCtx.createGain();
+    
+    reverbGain.gain.value = 0;
+    echoDelay.delayTime.value = 0;
+    echoFeedback.gain.value = 0;
+    echoGain.gain.value = 1;
+    dryGain.gain.value = 1;
+
+    // Echo loop
+    source.connect(echoGain);
+    echoGain.connect(echoDelay);
+    echoDelay.connect(echoFeedback);
+    echoFeedback.connect(echoDelay);
+    
+    // Reverb loop
+    source.connect(reverbNode);
+    reverbNode.connect(reverbGain);
+    
+    // Mix to destination
+    source.connect(dryGain);
+    echoDelay.connect(audioCtx.destination);
+    reverbGain.connect(audioCtx.destination);
+    dryGain.connect(audioCtx.destination);
+    
+    roomEffectsMap.set(mediaElement, { reverbNode, reverbGain, echoDelay, echoFeedback, lastSize: -1 });
+}
+
+function updateRoomEffectsLive(ws, isGlobalEdited) {
+    if (!ws) return;
+    attachRoomEffects(ws);
+    
+    const nodes = roomEffectsMap.get(ws.getMediaElement());
+    if (!nodes) return;
+    
+    const applyEffects = isGlobalEdited || ws === wsTrim;
+    const enabled = applyEffects && (chkRoomEffects ? chkRoomEffects.checked : false);
+    
+    if (enabled) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const mix = parseFloat(reverbMixSlider.value) / 100;
+        const size = parseFloat(reverbSizeSlider.value) / 100;
+        nodes.reverbGain.gain.setTargetAtTime(mix, audioCtx.currentTime, 0.05);
+        
+        if (Math.abs(nodes.lastSize - size) > 0.05) {
+            const duration = 0.5 + (size * 3.5); // 0.5s to 4s decay
+            nodes.reverbNode.buffer = createReverbImpulse(duration, 2.0);
+            nodes.lastSize = size;
+        }
+        
+        const delay = parseFloat(echoDelaySlider.value);
+        const feedback = parseFloat(echoFeedbackSlider.value) / 100;
+        nodes.echoDelay.delayTime.setTargetAtTime(delay, audioCtx.currentTime, 0.05);
+        nodes.echoFeedback.gain.setTargetAtTime(delay > 0 ? feedback : 0, audioCtx.currentTime, 0.05);
+    } else {
+        nodes.reverbGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+        nodes.echoFeedback.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+    }
+}
+
+// ── Math for audio fx ────────────────────────────────────────────────────────
 function applyLiveAudioMath(ws, isGlobalEdited) {
     if (!ws) return;
+
+    updateRoomEffectsLive(ws, isGlobalEdited);
 
     const currentTime = ws.getCurrentTime();
     const start = isGlobalEdited ? trimStartTime : (ws === wsTrim ? trimStartTime : 0);
@@ -988,6 +1116,56 @@ if (chkReverseAudio) {
     });
 }
 
+// ── Room Effects controls ─────────────────────────────────────────────────────
+if (chkRoomEffects) {
+    chkRoomEffects.addEventListener('change', (e) => {
+        const on = e.target.checked;
+        if (roomEffectsControls) {
+            roomEffectsControls.classList.toggle('opacity-50', !on);
+            roomEffectsControls.classList.toggle('pointer-events-none', !on);
+        }
+        if (wsTrim) applyLiveAudioMath(wsTrim, false);
+        if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        checkIfStateChanged();
+    });
+}
+
+const updateEffectsLive = () => {
+    if (wsTrim) applyLiveAudioMath(wsTrim, false);
+    if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
+    checkIfStateChanged();
+};
+
+if (reverbMixSlider) {
+    reverbMixSlider.addEventListener('input', (e) => {
+        if (lblReverbMix) lblReverbMix.textContent = `${e.target.value}%`;
+        if (chkRoomEffects.checked) updateEffectsLive();
+        else checkIfStateChanged(); // just to enable Apply button
+    });
+}
+if (reverbSizeSlider) {
+    reverbSizeSlider.addEventListener('input', (e) => {
+        if (lblReverbSize) lblReverbSize.textContent = `${e.target.value}%`;
+        if (chkRoomEffects.checked) updateEffectsLive();
+        else checkIfStateChanged();
+    });
+}
+if (echoDelaySlider) {
+    echoDelaySlider.addEventListener('input', (e) => {
+        if (lblEchoDelay) lblEchoDelay.textContent = `${parseFloat(e.target.value).toFixed(1)}s`;
+        if (chkRoomEffects.checked) updateEffectsLive();
+        else checkIfStateChanged();
+    });
+}
+if (echoFeedbackSlider) {
+    echoFeedbackSlider.addEventListener('input', (e) => {
+        if (lblEchoFeedback) lblEchoFeedback.textContent = `${e.target.value}%`;
+        if (chkRoomEffects.checked) updateEffectsLive();
+        else checkIfStateChanged();
+    });
+}
+
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 const keysPressed = new Set();
 
@@ -1195,6 +1373,11 @@ btnProcess.addEventListener('click', async () => {
                 tempo:        parseFloat(tempoSlider?.value ?? 1.0),
                 pitch:        parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
                 reverse:      chkReverseAudio?.checked ?? false,
+                roomEffects:  chkRoomEffects?.checked ?? false,
+                reverbMix:    parseInt(reverbMixSlider?.value ?? 0, 10),
+                reverbSize:   parseInt(reverbSizeSlider?.value ?? 50, 10),
+                echoDelay:    parseFloat(echoDelaySlider?.value ?? 0),
+                echoFeedback: parseInt(echoFeedbackSlider?.value ?? 20, 10),
             }),
         });
 

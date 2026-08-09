@@ -223,6 +223,12 @@ def process_audio():
     pitch         = max(-12,  min(12,  int(data.get("pitch",  0))))
     reverse       = bool(data.get("reverse", False))
 
+    room_effects  = bool(data.get("roomEffects", False))
+    reverb_mix    = float(data.get("reverbMix", 0)) / 100.0
+    reverb_size   = float(data.get("reverbSize", 50)) / 100.0
+    echo_delay    = float(data.get("echoDelay", 0))
+    echo_feedback = float(data.get("echoFeedback", 20)) / 100.0
+
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
         return jsonify({"error": "Audio original no encontrado"}), 404
@@ -260,6 +266,18 @@ def process_audio():
 
         if reverse:
             stream = ffmpeg.filter(stream, "areverse")
+
+        if room_effects:
+            if echo_delay > 0 and echo_feedback > 0:
+                delay_ms = int(echo_delay * 1000)
+                stream = ffmpeg.filter(stream, "aecho", 0.8, 0.9, delay_ms, echo_feedback)
+            if reverb_mix > 0:
+                # Simular Reverb con ecos densos y cortos
+                d1 = int(20 + reverb_size * 40)
+                d2 = int(35 + reverb_size * 60)
+                dec1 = reverb_mix * 0.8
+                dec2 = reverb_mix * 0.6
+                stream = ffmpeg.filter(stream, "aecho", 0.8, 0.9, f"{d1}|{d2}", f"{dec1:.2f}|{dec2:.2f}")
 
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)
