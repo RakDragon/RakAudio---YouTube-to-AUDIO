@@ -84,6 +84,12 @@ const chkReverseAudio      = document.getElementById('chkReverseAudio');
 const chkAuditorium        = document.getElementById('chkAuditorium');
 const auditoriumSpinner    = document.getElementById('auditoriumSpinner');
 
+const chk8D                = document.getElementById('chk8D');
+const controls8D           = document.getElementById('controls8D');
+const sel8DDir             = document.getElementById('sel8DDir');
+const slide8DSpeed         = document.getElementById('slide8DSpeed');
+const lbl8DSpeed           = document.getElementById('lbl8DSpeed');
+const card8D               = document.getElementById('card8D');
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
 const lblPlayTrim = document.getElementById('lblPlayTrim');
@@ -257,6 +263,7 @@ function renderHistory() {
         btn.addEventListener('click', (e) => {
             const targetUrl = e.currentTarget.dataset.url;
             if (targetUrl) {
+             
                 ytUrlInput.value = targetUrl;
                 document.getElementById('btnExtraer').click();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -292,6 +299,9 @@ function readEditorState() {
         pitch:        parseInt(pitchSlider      ? pitchSlider.value        : 0, 10),
         reverse:      chkReverseAudio           ? chkReverseAudio.checked  : false,
         auditorium:   chkAuditorium             ? chkAuditorium.checked    : false,
+        eight_d:       chk8D?.checked ?? false,
+        eight_d_dir:   sel8DDir?.value ?? 'left',
+        eight_d_speed: slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8,
     };
 }
 
@@ -305,6 +315,12 @@ function resetEditorControls() {
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = false;
     if (chkReverseAudio)      chkReverseAudio.checked      = false;
     if (chkAuditorium)        chkAuditorium.checked        = false;
+    
+    if (chk8D) chk8D.checked = false;
+    if (controls8D) controls8D.classList.add('hidden');
+    if (card8D) card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
+    if (sel8DDir) sel8DDir.value = 'left';
+    if (slide8DSpeed) { slide8DSpeed.value = 8; if (lbl8DSpeed) lbl8DSpeed.textContent = '8s'; }
 
     fInG.value  = 0; lblFadeInG.textContent  = '0s';
     fOutG.value = 0; lblFadeOutG.textContent = '0s';
@@ -421,6 +437,60 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
         ws.setPlaybackRate(rate, pitchVal === 0);
     } catch {
         // Browser cap exceeded — silently ignore
+    }
+
+    apply8D(ws, isGlobalEdited);
+}
+
+/** Applies Web Audio API nodes for live 8D panning effect. */
+function apply8D(ws, isGlobalEdited) {
+    if (!ws) return;
+    const audioEl = ws.getMediaElement();
+    if (!audioEl) return;
+
+    // Only apply if we are looking at the edited view (or it's the trim preview)
+    const shouldApply = (ws === wsTrim || isGlobalEdited) && chk8D && chk8D.checked;
+
+    if (!ws._8d) {
+        if (!shouldApply) return; // Don't build graph if not needed yet
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaElementSource(audioEl);
+            const panner = ctx.createStereoPanner();
+            const lfo = ctx.createOscillator();
+            lfo.type = 'sine';
+            
+            const gain = ctx.createGain();
+            lfo.connect(gain);
+            gain.connect(panner.pan);
+            lfo.start();
+
+            source.connect(panner);
+            panner.connect(ctx.destination);
+
+            ws._8d = { ctx, panner, lfo, gain, source };
+        } catch (e) {
+            console.error("No se pudo iniciar AudioContext 8D", e);
+            ws._8d = 'failed';
+        }
+    }
+
+    if (ws._8d && ws._8d !== 'failed') {
+        if (shouldApply) {
+            const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
+            ws._8d.lfo.frequency.value = 1 / speed;
+            
+            const dir = sel8DDir ? sel8DDir.value : 'left';
+            ws._8d.gain.gain.value = (dir === 'left') ? 1 : -1;
+            
+            try { ws._8d.source.disconnect(); } catch(e){}
+            ws._8d.source.connect(ws._8d.panner);
+            if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
+        } else {
+            // Bypass
+            try { ws._8d.source.disconnect(); } catch(e){}
+            ws._8d.source.connect(ws._8d.ctx.destination);
+        }
     }
 }
 
@@ -993,6 +1063,36 @@ if (chkReverseAudio) {
     chkReverseAudio.addEventListener('change', () => {
         toggleAudioReverseLive(); // async fire-and-forget; checkIfStateChanged runs synchronously
         checkIfStateChanged();
+    });
+}
+
+if (chk8D) {
+    chk8D.addEventListener('change', () => {
+        if (chk8D.checked) {
+            controls8D.classList.remove('hidden');
+            card8D.classList.replace('border-[#444]', 'border-[#FF422E]');
+        } else {
+            controls8D.classList.add('hidden');
+            card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
+        }
+        checkIfStateChanged();
+        if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        if (wsTrim) applyLiveAudioMath(wsTrim, false);
+    });
+}
+if (sel8DDir) {
+    sel8DDir.addEventListener('change', () => {
+        checkIfStateChanged();
+        if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        if (wsTrim) applyLiveAudioMath(wsTrim, false);
+    });
+}
+if (slide8DSpeed) {
+    slide8DSpeed.addEventListener('input', () => {
+        lbl8DSpeed.textContent = slide8DSpeed.value + 's';
+        checkIfStateChanged();
+        if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        if (wsTrim) applyLiveAudioMath(wsTrim, false);
     });
 }
 

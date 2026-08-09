@@ -279,17 +279,34 @@
                                     </label>
                                 </div>
 
-                                <!-- Efecto Auditorio (Reverb) -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex items-center justify-between">
-                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
-                                        <input type="checkbox" id="chkAuditorium" class="w-4 h-4 accent-[#FF422E]">
+                                <!-- Efecto 8D Audio -->
+                                <div class="bg-[#1f1f1f] p-3 rounded border border-[#444] space-y-3 transition-colors" id="card8D">
+                                    <label class="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" id="chk8D" class="w-4 h-4 accent-[#FF422E]">
                                         <div>
-                                            <span class="text-white text-sm font-bold block">Efecto Auditorio</span>
-                                            <span class="text-xs text-gray-400 block">Simula la acústica de un auditorio — Predelay · Early Reflections · Reverb Natural</span>
+                                            <span class="text-white text-sm font-bold block">Efecto 8D (Paneo Circular)</span>
+                                            <span class="text-xs text-gray-400 block">El audio rotará envolviendo tu cabeza (usar auriculares)</span>
                                         </div>
                                     </label>
-                                    <div id="auditoriumSpinner" class="hidden shrink-0 ml-2">
-                                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-[#444] border-t-[#FF422E]"></div>
+                                    <div id="controls8D" class="hidden space-y-3 pl-7 pt-1 border-t border-[#333]">
+                                        <div>
+                                            <label class="block text-xs font-bold text-gray-300 mb-1">Dirección Inicial:</label>
+                                            <select id="sel8DDir" class="w-full bg-[#2B2B2B] text-xs text-white p-1.5 rounded border border-[#555] focus:outline-none focus:border-[#FF422E]">
+                                                <option value="left">Izquierda ➔ Derecha</option>
+                                                <option value="right">Derecha ➔ Izquierda</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold mb-1 flex justify-between items-center text-gray-300">
+                                                <span>Tiempo de vuelta:</span>
+                                                <span id="lbl8DSpeed" class="text-[#FF422E] font-bold font-mono">8s</span>
+                                            </label>
+                                            <input type="range" id="slide8DSpeed" min="4" max="20" step="1" value="8" class="w-full">
+                                            <div class="flex justify-between text-[9px] text-gray-500 font-mono mt-1">
+                                                <span>Rápido (4s)</span>
+                                                <span>Lento (20s)</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

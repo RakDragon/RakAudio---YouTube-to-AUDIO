@@ -7,10 +7,7 @@ import time
 import traceback
 import uuid
 from collections import deque
-import math
 
-from pedalboard import Pedalboard, Reverb
-import soundfile as sf
 import ffmpeg
 import yt_dlp
 from flask import Flask, Response, jsonify, request, send_file
@@ -193,51 +190,6 @@ def get_audio(filename):
         return send_file(resolved)
     return jsonify({"error": "Archivo no encontrado"}), 404
 
-def apply_auditorium_effect(input_file, output_wav):
-    temp_wav = os.path.join(DOWNLOAD_DIR, f"temp_{uuid.uuid4().hex}.wav")
-    (ffmpeg
-        .input(input_file)
-        .output(temp_wav, format='wav', acodec='pcm_s16le')
-        .overwrite_output()
-        .run(quiet=True)
-    )
-    audio, samplerate = sf.read(temp_wav)
-    board = Pedalboard([Reverb(room_size=0.8, damping=0.5, wet_level=0.45, dry_level=0.85)])
-    effected = board(audio, samplerate)
-    sf.write(output_wav, effected, samplerate)
-    try:
-        os.remove(temp_wav)
-    except Exception:
-        pass
-
-# ─── Process Auditorium Preview ───────────────────────────────────────────────
-@app.route("/api/process_auditorium", methods=["POST"])
-def process_auditorium():
-    data = request.get_json(force=True, silent=True) or {}
-    video_id = data.get("id", "")
-    ext = data.get("ext", "")
-
-    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", video_id or ""):
-        return jsonify({"error": "ID de video inválido"}), 400
-
-    input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
-    if not os.path.exists(input_path):
-        return jsonify({"error": "Audio original no encontrado"}), 404
-
-    auditorium_filename = f"{video_id}_auditorium.wav"
-    output_path = os.path.join(PROCESSED_DIR, auditorium_filename)
-
-    if not os.path.exists(output_path):
-        try:
-            apply_auditorium_effect(input_path, output_path)
-        except Exception as e:
-            traceback.print_exc()
-            return jsonify({"error": "Error al procesar el audio de auditorio"}), 500
-
-    return jsonify({
-        "audioUrl": f"{request.host_url.rstrip('/')}/api/audio/{auditorium_filename}"
-    })
-
 # ─── Process audio ─────────────────────────────────────────────────────────────
 @app.route("/api/process", methods=["POST"])
 def process_audio():
@@ -270,7 +222,9 @@ def process_audio():
     tempo         = max(0.5, min(2.0, float(data.get("tempo", 1.0))))
     pitch         = max(-12,  min(12,  int(data.get("pitch",  0))))
     reverse       = bool(data.get("reverse", False))
-    auditorium    = bool(data.get("auditorium", False))
+    eight_d       = bool(data.get("eight_d", False))
+    eight_d_dir   = data.get("eight_d_dir", "left")
+    eight_d_speed = float(data.get("eight_d_speed", 8))
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -309,25 +263,11 @@ def process_audio():
 
         if reverse:
             stream = ffmpeg.filter(stream, "areverse")
-
-        # Extraer a un temporal y aplicar pedalboard si está activado
-        if auditorium:
-            pre_reverb_wav = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_prereverb.wav")
-            post_reverb_wav = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_postreverb.wav")
-            # Renderizamos el stream de FFmpeg hasta este punto a un WAV temporal
-            (ffmpeg.output(stream, pre_reverb_wav, format='wav', acodec='pcm_s16le')
-                   .overwrite_output()
-                   .run(quiet=True))
             
-            # Aplicamos pedalboard
-            apply_auditorium_effect(pre_reverb_wav, post_reverb_wav)
-            
-            # Continuamos el stream desde el WAV procesado
-            stream = ffmpeg.input(post_reverb_wav)
-            try:
-                os.remove(pre_reverb_wav)
-            except Exception:
-                pass
+        if eight_d:
+            hz = 1.0 / max(4.0, min(20.0, eight_d_speed))
+            offset_l, offset_r = ("0", "0.5") if eight_d_dir == "left" else ("0.5", "0")
+            stream = ffmpeg.filter(stream, "apulsator", mode="sine", hz=str(hz), offset_l=offset_l, offset_r=offset_r)
 
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)
