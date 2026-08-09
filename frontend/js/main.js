@@ -32,11 +32,12 @@ let rafTrim   = null;
 // instead of polling with setInterval
 let reversedAudioUrlPromise = null;
 let reversedAudioUrl        = null;
+let auditoriumAudioUrl      = null;
 
 let lastAppliedState = {
     start: 0, end: 0, fadeIn: 0, fadeOut: 0,
     adjustVol: false, volLevel: 1.0, tempo: 1.0,
-    normalizeVol: false, pitch: 0, reverse: false, auditoriumReverb: false,
+    normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
 };
 
 // ── Cached DOM references ─────────────────────────────────────────────────────
@@ -80,7 +81,8 @@ const pitchSlider          = document.getElementById('pitchSlider');
 const lblPitchValue        = document.getElementById('lblPitchValue');
 const chkNormalizeVolModal = document.getElementById('chkNormalizeVolModal');
 const chkReverseAudio      = document.getElementById('chkReverseAudio');
-const chkAuditoriumReverb  = document.getElementById('chkAuditoriumReverb');
+const chkAuditorium        = document.getElementById('chkAuditorium');
+const auditoriumSpinner    = document.getElementById('auditoriumSpinner');
 
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
@@ -288,8 +290,8 @@ function readEditorState() {
         tempo:        round2(tempoSlider        ? tempoSlider.value        : 1.0),
         normalizeVol: chkNormalizeVolModal      ? chkNormalizeVolModal.checked : false,
         pitch:        parseInt(pitchSlider      ? pitchSlider.value        : 0, 10),
-        reverse:          chkReverseAudio          ? chkReverseAudio.checked          : false,
-        auditoriumReverb: chkAuditoriumReverb       ? chkAuditoriumReverb.checked       : false,
+        reverse:      chkReverseAudio           ? chkReverseAudio.checked  : false,
+        auditorium:   chkAuditorium             ? chkAuditorium.checked    : false,
     };
 }
 
@@ -302,7 +304,7 @@ function resetEditorControls() {
     if (pitchSlider)  { pitchSlider.value  = 0;   if (lblPitchValue) lblPitchValue.textContent = '0 semitonos'; }
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = false;
     if (chkReverseAudio)      chkReverseAudio.checked      = false;
-    if (chkAuditoriumReverb)  chkAuditoriumReverb.checked  = false;
+    if (chkAuditorium)        chkAuditorium.checked        = false;
 
     fInG.value  = 0; lblFadeInG.textContent  = '0s';
     fOutG.value = 0; lblFadeOutG.textContent = '0s';
@@ -331,9 +333,9 @@ function checkIfStateChanged() {
         (!cur.adjustVol || Math.abs(cur.volLevel - prev.volLevel) < 0.01) &&
         Math.abs(cur.tempo - (prev.tempo || 1.0)) < 0.01 &&
         cur.normalizeVol === (prev.normalizeVol || false) &&
-        cur.pitch            === (prev.pitch            || 0)     &&
-        cur.reverse          === (prev.reverse          || false) &&
-        cur.auditoriumReverb === (prev.auditoriumReverb || false);
+        cur.pitch   === (prev.pitch   || 0)     &&
+        cur.reverse === (prev.reverse || false) &&
+        cur.auditorium === (prev.auditorium || false);
 
     btnApplyTrim.disabled = isSame;
     btnApplyTrim.classList.toggle('opacity-40',          isSame);
@@ -498,7 +500,8 @@ function setGlobalView(edited) {
     isEditedViewActive = edited;
 
     const isReverse = chkReverseAudio?.checked ?? false;
-    let targetUrl   = audioUrlGlobal;
+    const isAuditorium = chkAuditorium?.checked ?? false;
+    let targetUrl   = isAuditorium && auditoriumAudioUrl ? auditoriumAudioUrl : audioUrlGlobal;
 
     if (edited) {
         btnViewEdited.classList.replace('text-gray-400', 'text-white');
@@ -728,6 +731,7 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
         // toggleAudioReverseLive can await it without polling.
         if (reversedAudioUrl) { URL.revokeObjectURL(reversedAudioUrl); reversedAudioUrl = null; }
         reversedAudioUrlPromise = prepareReversedAudioUrl(data.audioUrl);
+        auditoriumAudioUrl = null; // reset for new video
 
         metaTitle.textContent    = data.title;
         metaChannel.textContent  = data.uploader;
@@ -747,7 +751,7 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
         lastAppliedState = {
             start: 0, end: round2(videoDuration),
             fadeIn: 0, fadeOut: 0, adjustVol: false, volLevel: 1.0,
-            tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false,
+            tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
         };
 
         resetEditorControls(); // M5: extracted helper
@@ -992,6 +996,49 @@ if (chkReverseAudio) {
     });
 }
 
+if (chkAuditorium) {
+    chkAuditorium.addEventListener('change', async (e) => {
+        const isChecked = e.target.checked;
+        chkAuditorium.disabled = true;
+        if (auditoriumSpinner) auditoriumSpinner.classList.remove('hidden');
+
+        try {
+            if (isChecked) {
+                if (!auditoriumAudioUrl) {
+                    const res = await fetch(`${API_BASE}/api/process_auditorium`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: currentVideoId, ext: currentExt })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    auditoriumAudioUrl = data.audioUrl;
+                }
+                
+                const curTime = wsGlobal ? wsGlobal.getCurrentTime() : 0;
+                if (wsGlobal) await wsGlobal.load(auditoriumAudioUrl);
+                if (wsTrim) await wsTrim.load(auditoriumAudioUrl);
+                if (wsGlobal) wsGlobal.setTime(curTime);
+                if (wsTrim) wsTrim.setTime(curTime);
+            } else {
+                let urlToLoad = chkReverseAudio?.checked && reversedAudioUrl ? reversedAudioUrl : audioUrlGlobal;
+                const curTime = wsGlobal ? wsGlobal.getCurrentTime() : 0;
+                if (wsGlobal) await wsGlobal.load(urlToLoad);
+                if (wsTrim) await wsTrim.load(urlToLoad);
+                if (wsGlobal) wsGlobal.setTime(curTime);
+                if (wsTrim) wsTrim.setTime(curTime);
+            }
+        } catch (err) {
+            console.error("Error en Auditorium:", err);
+            chkAuditorium.checked = !isChecked; // rollback
+        } finally {
+            chkAuditorium.disabled = false;
+            if (auditoriumSpinner) auditoriumSpinner.classList.add('hidden');
+            checkIfStateChanged();
+        }
+    });
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 const keysPressed = new Set();
 
@@ -1195,11 +1242,11 @@ btnProcess.addEventListener('click', async () => {
                 quality,
                 adjustVol:    chkAdjustVol.checked,
                 volLevel:     parseFloat(volAdjustSlider.value),
-                normalizeVol:      chkNormalizeVolModal?.checked ?? false,
-                tempo:             parseFloat(tempoSlider?.value ?? 1.0),
-                pitch:             parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
-                reverse:           chkReverseAudio?.checked ?? false,
-                auditoriumReverb:  chkAuditoriumReverb?.checked ?? false,
+                normalizeVol: chkNormalizeVolModal?.checked ?? false,
+                tempo:        parseFloat(tempoSlider?.value ?? 1.0),
+                pitch:        parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
+                reverse:      chkReverseAudio?.checked ?? false,
+                auditorium:   chkAuditorium?.checked ?? false,
             }),
         });
 

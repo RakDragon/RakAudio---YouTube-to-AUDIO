@@ -2,15 +2,16 @@ import json
 import os
 import re
 import shutil
-import struct
 import threading
 import time
 import traceback
 import uuid
 from collections import deque
+import math
 
+from pedalboard import Pedalboard, Reverb
+import soundfile as sf
 import ffmpeg
-import numpy as np
 import yt_dlp
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
@@ -192,94 +193,50 @@ def get_audio(filename):
         return send_file(resolved)
     return jsonify({"error": "Archivo no encontrado"}), 404
 
-# ─── Auditorium Reverb DSP ───────────────────────────────────────────────────
-def apply_auditorium_reverb(samples: np.ndarray, sr: int) -> np.ndarray:
-    """Three-stage auditorium reverb: Predelay → Early Reflections → FDN tail.
+def apply_auditorium_effect(input_file, output_wav):
+    temp_wav = os.path.join(DOWNLOAD_DIR, f"temp_{uuid.uuid4().hex}.wav")
+    (ffmpeg
+        .input(input_file)
+        .output(temp_wav, format='wav', acodec='pcm_s16le')
+        .overwrite_output()
+        .run(quiet=True)
+    )
+    audio, samplerate = sf.read(temp_wav)
+    board = Pedalboard([Reverb(room_size=0.8, damping=0.5, wet_level=0.45, dry_level=0.85)])
+    effected = board(audio, samplerate)
+    sf.write(output_wav, effected, samplerate)
+    try:
+        os.remove(temp_wav)
+    except Exception:
+        pass
 
-    Args:
-        samples: float32 array of shape (n_frames, n_channels). Must be stereo.
-        sr:      sample rate in Hz.
+# ─── Process Auditorium Preview ───────────────────────────────────────────────
+@app.route("/api/process_auditorium", methods=["POST"])
+def process_auditorium():
+    data = request.get_json(force=True, silent=True) or {}
+    video_id = data.get("id", "")
+    ext = data.get("ext", "")
 
-    Returns:
-        Processed float32 array of the same shape, values clamped to [-1, 1].
-    """
-    n_frames, n_ch = samples.shape
-    if n_ch < 2:
-        # Upmix mono → stereo for spatial processing
-        samples = np.stack([samples[:, 0], samples[:, 0]], axis=1)
-        n_ch = 2
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", video_id or ""):
+        return jsonify({"error": "ID de video inválido"}), 400
 
-    out = np.zeros_like(samples, dtype=np.float64)
-    src = samples.astype(np.float64)
+    input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
+    if not os.path.exists(input_path):
+        return jsonify({"error": "Audio original no encontrado"}), 404
 
-    # ── Stage 1: Predelay (30 ms) ────────────────────────────────────────────
-    predelay = int(0.030 * sr)
-    delayed = np.zeros_like(src)
-    delayed[predelay:] = src[: n_frames - predelay]
+    auditorium_filename = f"{video_id}_auditorium.wav"
+    output_path = os.path.join(PROCESSED_DIR, auditorium_filename)
 
-    # ── Stage 2: Early Reflections ───────────────────────────────────────────
-    # Seven parallel stereo delays; cross-feed between L/R simulates lateral
-    # reflections off walls and creates perceived spatial width.
-    early_taps = [
-        # (delay_ms, gain_L, gain_R, cross_L, cross_R)
-        (17,  0.80, 0.70, 0.08, 0.06),
-        (23,  0.70, 0.80, 0.06, 0.08),
-        (31,  0.60, 0.60, 0.10, 0.10),
-        (37,  0.50, 0.65, 0.07, 0.09),
-        (43,  0.55, 0.50, 0.09, 0.07),
-        (53,  0.40, 0.45, 0.06, 0.06),
-        (67,  0.35, 0.40, 0.05, 0.05),
-    ]
+    if not os.path.exists(output_path):
+        try:
+            apply_auditorium_effect(input_path, output_path)
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"error": "Error al procesar el audio de auditorio"}), 500
 
-    early = np.zeros_like(src)
-    for delay_ms, g_l, g_r, cx_l, cx_r in early_taps:
-        d = int((delay_ms / 1000.0) * sr)
-        if d >= n_frames:
-            continue
-        tap = np.zeros_like(src)
-        tap[d:, 0] = delayed[: n_frames - d, 0] * g_l + delayed[: n_frames - d, 1] * cx_l
-        tap[d:, 1] = delayed[: n_frames - d, 1] * g_r + delayed[: n_frames - d, 0] * cx_r
-        early += tap
-
-    # ── Stage 3: FDN Reverb tail with High-Cut filter ────────────────────────
-    # Four parallel feedback delay lines tuned to mutually prime lengths.
-    # RT60 ≈ 2 s → feedback gain g = 0.001^(delay/RT60).
-    RT60        = 2.0
-    fdn_delays_ms = [67, 89, 113, 151]   # prime-ish, stagger comb peaks
-    fdn_out = np.zeros_like(src)
-
-    # High-cut 1st-order IIR low-pass at f_cut Hz.
-    # Coefficient: α = exp(-2π·f_cut / sr)
-    f_cut = 7000.0
-    alpha = np.exp(-2.0 * np.pi * f_cut / sr)
-
-    for d_ms in fdn_delays_ms:
-        d      = int((d_ms / 1000.0) * sr)
-        if d < 1:
-            continue
-        g      = 0.001 ** (d / (RT60 * sr))   # Sabine decay per sample-block
-        buf    = np.zeros((d, n_ch), dtype=np.float64)
-        line   = np.zeros_like(src)
-        lp_y   = np.zeros(n_ch, dtype=np.float64)  # IIR state
-
-        for i in range(n_frames):
-            idx   = i % d
-            x_in  = early[i] + buf[idx] * g
-            # High-cut filter update
-            lp_y  = alpha * lp_y + (1.0 - alpha) * x_in
-            buf[idx] = lp_y
-            line[i]  = lp_y
-
-        fdn_out += line
-
-    # ── Mix dry + early + reverb tail ────────────────────────────────────────
-    wet_early = 0.30
-    wet_tail  = 0.25
-    dry       = 0.55
-    out = dry * src + wet_early * early + wet_tail * fdn_out
-
-    return np.clip(out, -1.0, 1.0).astype(np.float32)
-
+    return jsonify({
+        "audioUrl": f"{request.host_url.rstrip('/')}/api/audio/{auditorium_filename}"
+    })
 
 # ─── Process audio ─────────────────────────────────────────────────────────────
 @app.route("/api/process", methods=["POST"])
@@ -312,8 +269,8 @@ def process_audio():
     normalize_vol = bool(data.get("normalizeVol", False))
     tempo         = max(0.5, min(2.0, float(data.get("tempo", 1.0))))
     pitch         = max(-12,  min(12,  int(data.get("pitch",  0))))
-    reverse            = bool(data.get("reverse",           False))
-    auditorium_reverb  = bool(data.get("auditoriumReverb",  False))
+    reverse       = bool(data.get("reverse", False))
+    auditorium    = bool(data.get("auditorium", False))
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -353,69 +310,30 @@ def process_audio():
         if reverse:
             stream = ffmpeg.filter(stream, "areverse")
 
+        # Extraer a un temporal y aplicar pedalboard si está activado
+        if auditorium:
+            pre_reverb_wav = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_prereverb.wav")
+            post_reverb_wav = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_postreverb.wav")
+            # Renderizamos el stream de FFmpeg hasta este punto a un WAV temporal
+            (ffmpeg.output(stream, pre_reverb_wav, format='wav', acodec='pcm_s16le')
+                   .overwrite_output()
+                   .run(quiet=True))
+            
+            # Aplicamos pedalboard
+            apply_auditorium_effect(pre_reverb_wav, post_reverb_wav)
+            
+            # Continuamos el stream desde el WAV procesado
+            stream = ffmpeg.input(post_reverb_wav)
+            try:
+                os.remove(pre_reverb_wav)
+            except Exception:
+                pass
+
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)
         if fade_out > 0:
             stream = ffmpeg.filter(stream, "afade", type="out",
                                    start_time=max(0.0, duration_trimmed - fade_out), duration=fade_out)
-
-        # ── Auditorium Reverb: Offline DSP via PCM pipe ──────────────────────
-        # If requested, decode the current stream to raw PCM float32 into memory,
-        # apply the three-stage DSP, then swap output_path for a WAV temp file
-        # so the subsequent FFmpeg re-encode reads the processed PCM.
-        if auditorium_reverb:
-            update_progress(client_id, {
-                "status": "processing", "progress": 30,
-                "msg": "Aplicando efecto de auditorio (Offline DSP)..."
-            })
-
-            # Step A: decode to raw stereo float32 s16le via pipe
-            pcm_raw, pcm_err = (
-                ffmpeg.output(stream, "pipe:", format="f32le", ac=2, ar=44100)
-                .run(capture_stdout=True, capture_stderr=True, quiet=True)
-            )
-
-            if not pcm_raw:
-                err_msg = pcm_err.decode("utf-8", errors="ignore").strip()
-                raise RuntimeError(f"No se pudo decodificar PCM para DSP: {err_msg}")
-
-            # Step B: reshape to (n_frames, 2) and apply DSP
-            samples = np.frombuffer(pcm_raw, dtype=np.float32).reshape(-1, 2)
-            processed = apply_auditorium_reverb(samples, 44100)
-
-            # Step C: write processed PCM to a temp WAV file
-            wav_tmp = output_path.replace(f".{out_format}", "_reverb_tmp.wav")
-            pcm_bytes = processed.tobytes()
-            n_frames_dsp   = processed.shape[0]
-            n_ch_dsp       = 2
-            sr_dsp         = 44100
-            bps            = 4  # float32
-            block_align    = n_ch_dsp * bps
-            byte_rate      = sr_dsp * block_align
-            data_size      = len(pcm_bytes)
-            with open(wav_tmp, "wb") as wf:
-                # Minimal RIFF/WAV header for 32-bit float PCM
-                wf.write(b"RIFF")
-                wf.write(struct.pack("<I", 36 + data_size))
-                wf.write(b"WAVE")
-                wf.write(b"fmt ")
-                wf.write(struct.pack("<I", 16))          # chunk size
-                wf.write(struct.pack("<H", 3))           # PCM float = 3
-                wf.write(struct.pack("<H", n_ch_dsp))
-                wf.write(struct.pack("<I", sr_dsp))
-                wf.write(struct.pack("<I", byte_rate))
-                wf.write(struct.pack("<H", block_align))
-                wf.write(struct.pack("<H", bps * 8))     # bits per sample
-                wf.write(b"data")
-                wf.write(struct.pack("<I", data_size))
-                wf.write(pcm_bytes)
-
-            # Step D: re-encode from temp WAV → final output
-            stream = ffmpeg.input(wav_tmp)
-            update_progress(client_id, {
-                "status": "processing", "progress": 60,
-                "msg": "Re-codificando con efecto de auditorio..."
-            })
 
         codec_kwargs: dict = {}
         if out_format in ("mp3", "m4a"):
@@ -458,17 +376,7 @@ def process_audio():
             "status": "done", "progress": 100, "msg": "Recibiendo archivo generado..."
         })
 
-        response = send_file(output_path, as_attachment=True, download_name=f"procesado.{out_format}")
-
-        # Cleanup temp WAV if auditorium DSP was used
-        if auditorium_reverb:
-            wav_tmp_path = output_path.replace(f".{out_format}", "_reverb_tmp.wav")
-            try:
-                os.remove(wav_tmp_path)
-            except OSError:
-                pass
-
-        return response
+        return send_file(output_path, as_attachment=True, download_name=f"procesado.{out_format}")
 
     except (RuntimeError, ValueError, OSError) as e:
         traceback.print_exc()

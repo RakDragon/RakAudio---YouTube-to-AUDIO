@@ -279,15 +279,18 @@
                                     </label>
                                 </div>
 
-                                <!-- Efecto Auditorio -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
-                                    <label class="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" id="chkAuditoriumReverb" class="w-4 h-4 accent-[#FF422E]">
+                                <!-- Efecto Auditorio (Reverb) -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex items-center justify-between">
+                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                        <input type="checkbox" id="chkAuditorium" class="w-4 h-4 accent-[#FF422E]">
                                         <div>
                                             <span class="text-white text-sm font-bold block">Efecto Auditorio</span>
-                                            <span class="text-xs text-gray-400 block">Simula la acústica de un auditorio — Predelay · Early Reflections · Reverb Natural (solo exportación)</span>
+                                            <span class="text-xs text-gray-400 block">Simula la acústica de un auditorio — Predelay · Early Reflections · Reverb Natural</span>
                                         </div>
                                     </label>
+                                    <div id="auditoriumSpinner" class="hidden shrink-0 ml-2">
+                                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-[#444] border-t-[#FF422E]"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
