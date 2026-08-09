@@ -296,3 +296,24 @@ input[type=range] {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* ── ACRYLIC / FROSTED GLASS METADATA BACKGROUND ── */
+        .acrylic-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            background-image: var(--thumb-url, none);
+            background-size: cover;
+            background-position: center;
+            transform: scale(1.15);          /* expand beyond edges so blur hides hard borders */
+            filter: blur(28px) saturate(1.4) brightness(0.55);
+            transition: background-image 0.4s ease;
+        }
+
+        /* Dark tint overlay for readability */
+        .acrylic-bg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 20, 20, 0.55);
+        }

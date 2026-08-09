@@ -732,6 +732,11 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
         metaThumb.src            = data.thumbnailUrl;
         metaDuration.textContent = formatTime(data.duration);
 
+        // Acrylic background: set CSS variable with the thumbnail URL
+        metadataSection.style.setProperty('--thumb-url', `url("${data.thumbnailUrl}")`);
+        const acrylicBg = document.getElementById('metaAcrylicBg');
+        if (acrylicBg) acrylicBg.style.backgroundImage = `url("${data.thumbnailUrl}")`;
+
         videoDuration = data.duration;
         trimStartTime = 0;
         trimEndTime   = videoDuration;
