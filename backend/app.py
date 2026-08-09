@@ -223,11 +223,9 @@ def process_audio():
     pitch         = max(-12,  min(12,  int(data.get("pitch",  0))))
     reverse       = bool(data.get("reverse", False))
 
-    room_effects  = bool(data.get("roomEffects", False))
-    reverb_mix    = float(data.get("reverbMix", 0)) / 100.0
-    reverb_size   = float(data.get("reverbSize", 50)) / 100.0
-    echo_delay    = float(data.get("echoDelay", 0))
-    echo_feedback = float(data.get("echoFeedback", 20)) / 100.0
+    room_effects = bool(data.get("roomEffects", False))
+    space_size   = max(0, min(100, int(data.get("spaceSize", 40))))   # 0-100
+    echo_decay   = max(0, min(100, int(data.get("echoDecay",  30))))  # 0-100
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -268,16 +266,21 @@ def process_audio():
             stream = ffmpeg.filter(stream, "areverse")
 
         if room_effects:
-            if echo_delay > 0 and echo_feedback > 0:
-                delay_ms = int(echo_delay * 1000)
-                stream = ffmpeg.filter(stream, "aecho", 0.8, 0.9, delay_ms, echo_feedback)
-            if reverb_mix > 0:
-                # Simular Reverb con ecos densos y cortos
-                d1 = int(20 + reverb_size * 40)
-                d2 = int(35 + reverb_size * 60)
-                dec1 = reverb_mix * 0.8
-                dec2 = reverb_mix * 0.6
-                stream = ffmpeg.filter(stream, "aecho", 0.8, 0.9, f"{d1}|{d2}", f"{dec1:.2f}|{dec2:.2f}")
+            # Mirror the frontend OfflineAudioContext DSP math:
+            #   spaceSize 0→100  ↦  delay_ms  5ms → 200ms
+            #   echoDecay  0→100  ↦  feedback  0   → 0.80
+            delay_ms     = int(5 + (space_size / 100.0) * 195)          # 5–200 ms
+            feedback_raw = (echo_decay / 100.0) * 0.80                  # 0–0.80
+            feedback     = round(max(0.01, feedback_raw), 3)
+            wet_gain     = round(min(0.85, feedback_raw * 1.05), 3) if feedback_raw > 0 else 0
+            if wet_gain > 0:
+                stream = ffmpeg.filter(
+                    stream, "aecho",
+                    0.8,          # in_gain  (dry input level)
+                    wet_gain,     # out_gain (wet output level — matches JS wetGain.gain)
+                    delay_ms,     # delay(s) in ms
+                    feedback,     # decay(s) — matches JS fbGain.gain
+                )
 
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)

@@ -37,8 +37,11 @@ let lastAppliedState = {
     start: 0, end: 0, fadeIn: 0, fadeOut: 0,
     adjustVol: false, volLevel: 1.0, tempo: 1.0,
     normalizeVol: false, pitch: 0, reverse: false,
-    roomEffects: false, reverbMix: 0, reverbSize: 50, echoDelay: 0, echoFeedback: 20
+    roomEffects: false, spaceSize: 40, echoDecay: 30,
 };
+
+// Room Effects offline-rendered Blob URL (null = not yet rendered / clean)
+let roomFxUrl = null;
 
 // ── Cached DOM references ─────────────────────────────────────────────────────
 const statusMsg        = document.getElementById('statusMsg');
@@ -82,17 +85,15 @@ const lblPitchValue        = document.getElementById('lblPitchValue');
 const chkNormalizeVolModal = document.getElementById('chkNormalizeVolModal');
 const chkReverseAudio      = document.getElementById('chkReverseAudio');
 
-// Room Effects controls
-const chkRoomEffects       = document.getElementById('chkRoomEffects');
-const roomEffectsControls  = document.getElementById('roomEffectsControls');
-const reverbMixSlider      = document.getElementById('reverbMixSlider');
-const reverbSizeSlider     = document.getElementById('reverbSizeSlider');
-const echoDelaySlider      = document.getElementById('echoDelaySlider');
-const echoFeedbackSlider   = document.getElementById('echoFeedbackSlider');
-const lblReverbMix         = document.getElementById('lblReverbMix');
-const lblReverbSize        = document.getElementById('lblReverbSize');
-const lblEchoDelay         = document.getElementById('lblEchoDelay');
-const lblEchoFeedback      = document.getElementById('lblEchoFeedback');
+// Room Effects (Offline DSP) controls
+const chkRoomEffects      = document.getElementById('chkRoomEffects');
+const roomEffectsControls = document.getElementById('roomEffectsControls');
+const spaceSizeSlider     = document.getElementById('spaceSizeSlider');
+const echoDecaySlider     = document.getElementById('echoDecaySlider');
+const lblSpaceSize        = document.getElementById('lblSpaceSize');
+const lblEchoDecay        = document.getElementById('lblEchoDecay');
+const btnPreviewRoomFx    = document.getElementById('btnPreviewRoomFx');
+const lblRoomFxStatus     = document.getElementById('lblRoomFxStatus');
 
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
@@ -302,10 +303,8 @@ function readEditorState() {
         pitch:        parseInt(pitchSlider      ? pitchSlider.value        : 0, 10),
         reverse:      chkReverseAudio           ? chkReverseAudio.checked  : false,
         roomEffects:  chkRoomEffects            ? chkRoomEffects.checked   : false,
-        reverbMix:    parseInt(reverbMixSlider  ? reverbMixSlider.value    : 0, 10),
-        reverbSize:   parseInt(reverbSizeSlider ? reverbSizeSlider.value   : 50, 10),
-        echoDelay:    parseFloat(echoDelaySlider? echoDelaySlider.value    : 0),
-        echoFeedback: parseInt(echoFeedbackSlider? echoFeedbackSlider.value: 20, 10)
+        spaceSize:    parseInt(spaceSizeSlider  ? spaceSizeSlider.value    : 40, 10),
+        echoDecay:    parseInt(echoDecaySlider  ? echoDecaySlider.value    : 30, 10),
     };
 }
 
@@ -319,14 +318,14 @@ function resetEditorControls() {
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = false;
     if (chkReverseAudio)      chkReverseAudio.checked      = false;
 
+    // Room Effects reset
     if (chkRoomEffects) chkRoomEffects.checked = false;
-    if (reverbMixSlider) { reverbMixSlider.value = 0; if (lblReverbMix) lblReverbMix.textContent = '0%'; }
-    if (reverbSizeSlider) { reverbSizeSlider.value = 50; if (lblReverbSize) lblReverbSize.textContent = '50%'; }
-    if (echoDelaySlider) { echoDelaySlider.value = 0; if (lblEchoDelay) lblEchoDelay.textContent = '0.0s'; }
-    if (echoFeedbackSlider) { echoFeedbackSlider.value = 20; if (lblEchoFeedback) lblEchoFeedback.textContent = '20%'; }
-    if (roomEffectsControls) {
-        roomEffectsControls.classList.add('opacity-50', 'pointer-events-none');
-    }
+    if (spaceSizeSlider)  { spaceSizeSlider.value  = 40; if (lblSpaceSize)  lblSpaceSize.textContent  = '40%'; }
+    if (echoDecaySlider)  { echoDecaySlider.value  = 30; if (lblEchoDecay)  lblEchoDecay.textContent  = '30%'; }
+    if (roomEffectsControls) roomEffectsControls.classList.add('opacity-50', 'pointer-events-none');
+    if (lblRoomFxStatus) { lblRoomFxStatus.textContent = ''; lblRoomFxStatus.classList.add('hidden'); }
+    // Revoke old rendered URL
+    if (roomFxUrl) { URL.revokeObjectURL(roomFxUrl); roomFxUrl = null; }
 
     fInG.value  = 0; lblFadeInG.textContent  = '0s';
     fOutG.value = 0; lblFadeOutG.textContent = '0s';
@@ -359,10 +358,8 @@ function checkIfStateChanged() {
         cur.reverse === (prev.reverse || false) &&
         cur.roomEffects === (prev.roomEffects || false) &&
         (!cur.roomEffects || (
-            cur.reverbMix === (prev.reverbMix || 0) &&
-            cur.reverbSize === (prev.reverbSize || 50) &&
-            Math.abs(cur.echoDelay - (prev.echoDelay || 0)) < 0.01 &&
-            cur.echoFeedback === (prev.echoFeedback || 20)
+            cur.spaceSize  === (prev.spaceSize  ?? 40) &&
+            cur.echoDecay  === (prev.echoDecay  ?? 30)
         ));
 
     btnApplyTrim.disabled = isSame;
@@ -409,185 +406,13 @@ function updateTrimProgressUI() {
 /**
  * Apply real-time fade envelope, volume, tempo and pitch to a WaveSurfer instance.
  * Called from the rAF-throttled audioprocess callback — must stay cheap.
+ * Room Effects are handled via Offline DSP (renderRoomEffectsOffline) — no Web Audio
+ * nodes are attached here to avoid ghost audio after pause.
  * All element references are cached at module level (no getElementById calls).
  */
-// ── Offline DSP for Room Effects ──────────────────────────────────────────────
-function audioBufferToWav(buffer) {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const format = 1; // PCM
-    const bitDepth = 16;
-    const bytesPerSample = bitDepth / 8;
-    const blockAlign = numChannels * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = buffer.length * blockAlign;
-    const bufferLength = 44 + dataSize;
-    const arrayBuffer = new ArrayBuffer(bufferLength);
-    const view = new DataView(arrayBuffer);
-
-    const writeString = (view, offset, string) => {
-        for (let i = 0; i < string.length; i++) {
-            view.setUint8(offset + i, string.charCodeAt(i));
-        }
-    };
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-
-    const channels = [];
-    for (let i = 0; i < numChannels; i++) channels.push(buffer.getChannelData(i));
-
-    let offset = 44;
-    for (let i = 0; i < buffer.length; i++) {
-        for (let channel = 0; channel < numChannels; channel++) {
-            let sample = Math.max(-1, Math.min(1, channels[channel][i]));
-            sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-            view.setInt16(offset, sample, true);
-            offset += 2;
-        }
-    }
-    return new Blob([view], { type: 'audio/wav' });
-}
-
-let originalAudioBuffer = null;
-let currentProcessedBlobUrl = null;
-let offlineRenderTimeout = null;
-
-async function fetchAndDecodeOriginalAudio() {
-    if (originalAudioBuffer) return originalAudioBuffer;
-    if (!audioUrlGlobal) return null;
-    showWaveformLoading();
-    try {
-        const response = await fetch(audioUrlGlobal);
-        const arrayBuffer = await response.arrayBuffer();
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        originalAudioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        return originalAudioBuffer;
-    } catch (e) {
-        console.error('Error decoding audio for offline DSP', e);
-        return null;
-    }
-}
-
-async function processAudioOffline() {
-    const enabled = chkRoomEffects ? chkRoomEffects.checked : false;
-    
-    if (!enabled) {
-        if (currentProcessedBlobUrl) {
-            URL.revokeObjectURL(currentProcessedBlobUrl);
-            currentProcessedBlobUrl = null;
-            if (wsTrim) {
-                const time = wsTrim.getCurrentTime();
-                const playing = wsTrim.isPlaying();
-                await wsTrim.load(audioUrlGlobal);
-                wsTrim.setTime(time);
-                if (playing) wsTrim.play();
-            }
-        }
-        return;
-    }
-
-    const buffer = await fetchAndDecodeOriginalAudio();
-    if (!buffer) { hideWaveformLoading(); return; }
-
-    showWaveformLoading();
-
-    try {
-        const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        const source = offlineCtx.createBufferSource();
-        source.buffer = buffer;
-
-        const reverbMix = parseFloat(reverbMixSlider.value) / 100;
-        const reverbSize = parseFloat(reverbSizeSlider.value) / 100;
-        const echoDelayTime = parseFloat(echoDelaySlider.value);
-        const echoFeedbackVal = parseFloat(echoFeedbackSlider.value) / 100;
-
-        const dryGain = offlineCtx.createGain();
-        dryGain.gain.value = 1;
-
-        const echoDelay = offlineCtx.createDelay(3.0);
-        const echoFeedback = offlineCtx.createGain();
-        const echoGain = offlineCtx.createGain();
-        
-        echoDelay.delayTime.value = echoDelayTime;
-        echoFeedback.gain.value = echoDelayTime > 0 ? echoFeedbackVal : 0;
-        echoGain.gain.value = 1;
-
-        const reverbNode = offlineCtx.createConvolver();
-        const reverbGain = offlineCtx.createGain();
-        reverbGain.gain.value = reverbMix;
-        
-        if (reverbMix > 0) {
-            const duration = 0.5 + (reverbSize * 3.5);
-            const length = offlineCtx.sampleRate * duration;
-            const impulse = offlineCtx.createBuffer(2, length, offlineCtx.sampleRate);
-            const left = impulse.getChannelData(0);
-            const right = impulse.getChannelData(1);
-            for (let i = 0; i < length; i++) {
-                const factor = Math.pow(1 - i / length, 2.0);
-                left[i] = (Math.random() * 2 - 1) * factor;
-                right[i] = (Math.random() * 2 - 1) * factor;
-            }
-            reverbNode.buffer = impulse;
-        }
-
-        source.connect(dryGain);
-        
-        source.connect(echoGain);
-        echoGain.connect(echoDelay);
-        echoDelay.connect(echoFeedback);
-        echoFeedback.connect(echoDelay);
-        
-        source.connect(reverbNode);
-        reverbNode.connect(reverbGain);
-
-        dryGain.connect(offlineCtx.destination);
-        echoDelay.connect(offlineCtx.destination);
-        reverbGain.connect(offlineCtx.destination);
-
-        source.start(0);
-
-        const renderedBuffer = await offlineCtx.startRendering();
-        const wavBlob = audioBufferToWav(renderedBuffer);
-        
-        if (currentProcessedBlobUrl) URL.revokeObjectURL(currentProcessedBlobUrl);
-        currentProcessedBlobUrl = URL.createObjectURL(wavBlob);
-
-        if (wsTrim) {
-            const time = wsTrim.getCurrentTime();
-            const playing = wsTrim.isPlaying();
-            await wsTrim.load(currentProcessedBlobUrl);
-            wsTrim.setTime(time);
-            if (playing) wsTrim.play();
-        }
-        if (isEditedViewActive && wsGlobal) {
-            const time = wsGlobal.getCurrentTime();
-            const playing = wsGlobal.isPlaying();
-            await wsGlobal.load(currentProcessedBlobUrl);
-            wsGlobal.setTime(time);
-            if (playing) wsGlobal.play();
-        }
-    } catch (e) {
-        console.error("Error offline rendering", e);
-    }
-    
-    hideWaveformLoading();
-}
-
-// ── Math for audio fx ────────────────────────────────────────────────────────
 function applyLiveAudioMath(ws, isGlobalEdited) {
     if (!ws) return;
+
 
     const currentTime = ws.getCurrentTime();
     const start = isGlobalEdited ? trimStartTime : (ws === wsTrim ? trimStartTime : 0);
@@ -1197,59 +1022,171 @@ if (chkReverseAudio) {
     });
 }
 
-// ── Room Effects controls ─────────────────────────────────────────────────────
+
+// ── Room Effects — Offline DSP ────────────────────────────────────────────────
+// All processing is done via OfflineAudioContext so the rendered audio is a
+// normal audio buffer. Pausing stops cleanly (no ghost echo), and the effect
+// is permanently baked into the Blob URL loaded into WaveSurfer.
+
+/**
+ * Render room effects (space + echo) into a new AudioBuffer using
+ * OfflineAudioContext. Returns a Blob URL pointing to a WAV file with the
+ * effect baked in for the given time range [start, end].
+ *
+ * @param {string}  sourceUrl  - URL of the original audio to process.
+ * @param {number}  spaceSize  - 0..100 — room size (maps delay 5ms → 200ms).
+ * @param {number}  echoDecay  - 0..100 — feedback/decay (maps 0 → 0.80).
+ * @param {number}  startSec   - trim start in seconds.
+ * @param {number}  endSec     - trim end in seconds.
+ * @returns {Promise<string>}  - Blob URL of the WAV with effects.
+ */
+async function renderRoomEffectsOffline(sourceUrl, spaceSize, echoDecay, startSec, endSec) {
+    // 1. Fetch & decode the full audio
+    const arrayBuf  = await (await fetch(sourceUrl)).arrayBuffer();
+    const decodeCtx = new AudioContext();
+    const fullBuf   = await decodeCtx.decodeAudioData(arrayBuf);
+    decodeCtx.close().catch(() => {});
+
+    const sr         = fullBuf.sampleRate;
+    const numCh      = fullBuf.numberOfChannels;
+    const startFrame = Math.round(startSec * sr);
+    const endFrame   = Math.min(fullBuf.length, Math.round(endSec * sr));
+    const srcFrames  = endFrame - startFrame;
+
+    // 2. Create a trimmed source buffer
+    const trimBuf = new AudioBuffer({ numberOfChannels: numCh, length: srcFrames, sampleRate: sr });
+    for (let c = 0; c < numCh; c++) {
+        trimBuf.copyToChannel(fullBuf.getChannelData(c).subarray(startFrame, endFrame), c);
+    }
+
+    // 3. Map parameters to DSP values
+    //    spaceSize  0→100  maps to delayTime  5ms → 200ms
+    //    echoDecay  0→100  maps to feedback   0   → 0.80
+    const delayTimeSec = 0.005 + (spaceSize / 100) * 0.195;
+    const feedbackGain = (echoDecay / 100) * 0.80;
+    // Tail: how long echo rings after audio ends (max 6 s)
+    const tailSec = feedbackGain > 0
+        ? Math.min(6, (-delayTimeSec / Math.log(feedbackGain + 1e-9)) * 2.5)
+        : 0.5;
+    const totalFrames = srcFrames + Math.ceil(tailSec * sr);
+
+    // 4. Build OfflineAudioContext graph
+    const offCtx = new OfflineAudioContext(numCh, totalFrames, sr);
+
+    const src       = offCtx.createBufferSource();
+    src.buffer      = trimBuf;
+
+    const dryGain   = offCtx.createGain();
+    dryGain.gain.value = 1.0;
+
+    const wetGain   = offCtx.createGain();
+    // Wet mix scales with decay so a value of 0 = completely dry
+    wetGain.gain.value = feedbackGain > 0 ? Math.min(0.85, feedbackGain * 1.05) : 0;
+
+    const delayNode = offCtx.createDelay(3.0);
+    delayNode.delayTime.value = delayTimeSec;
+
+    const fbGain    = offCtx.createGain();
+    fbGain.gain.value = feedbackGain;
+
+    // Graph: src → dry → out
+    //        src → delay → wet → out
+    //        delay → fbGain → delay  (echo feedback loop)
+    src.connect(dryGain);
+    dryGain.connect(offCtx.destination);
+
+    src.connect(delayNode);
+    delayNode.connect(fbGain);
+    fbGain.connect(delayNode);      // feedback loop
+    delayNode.connect(wetGain);
+    wetGain.connect(offCtx.destination);
+
+    // 5. Render
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+
+    // 6. Encode to WAV using the existing audioBufferToWav helper
+    const blob = audioBufferToWav(rendered);
+    return URL.createObjectURL(blob);
+}
+
+// Checkbox — enable / disable the controls panel
 if (chkRoomEffects) {
     chkRoomEffects.addEventListener('change', (e) => {
         const on = e.target.checked;
         if (roomEffectsControls) {
-            roomEffectsControls.classList.toggle('opacity-50', !on);
+            roomEffectsControls.classList.toggle('opacity-50',         !on);
             roomEffectsControls.classList.toggle('pointer-events-none', !on);
         }
-        if (wsTrim) applyLiveAudioMath(wsTrim, false);
-        if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        // When disabling, revert wsTrim to the original (or reversed) audio URL
+        if (!on && wsTrim) {
+            const baseUrl = (chkReverseAudio?.checked && reversedAudioUrl) ? reversedAudioUrl : audioUrlGlobal;
+            if (roomFxUrl) { URL.revokeObjectURL(roomFxUrl); roomFxUrl = null; }
+            const wasPlaying = wsTrim.isPlaying();
+            const curTime    = wsTrim.getCurrentTime();
+            wsTrim.once('decode', () => { wsTrim.setTime(curTime); if (wasPlaying) wsTrim.play(); });
+            wsTrim.load(baseUrl);
+        }
+        if (lblRoomFxStatus) {
+            lblRoomFxStatus.textContent = on ? 'Ajusta los parámetros y presiona Previsualizar.' : '';
+            lblRoomFxStatus.classList.toggle('hidden', !on);
+        }
         checkIfStateChanged();
-        
-        processAudioOffline();
     });
 }
 
-const updateEffectsLive = () => {
-    if (wsTrim) applyLiveAudioMath(wsTrim, false);
-    if (isEditedViewActive && wsGlobal) applyLiveAudioMath(wsGlobal, true);
-    checkIfStateChanged();
+// Sliders — only update labels (no real-time DSP — effect is baked on demand)
+if (spaceSizeSlider) {
+    spaceSizeSlider.addEventListener('input', (e) => {
+        if (lblSpaceSize) lblSpaceSize.textContent = `${e.target.value}%`;
+        checkIfStateChanged();
+    });
+}
+if (echoDecaySlider) {
+    echoDecaySlider.addEventListener('input', (e) => {
+        if (lblEchoDecay) lblEchoDecay.textContent = `${e.target.value}%`;
+        checkIfStateChanged();
+    });
+}
 
-    if (offlineRenderTimeout) clearTimeout(offlineRenderTimeout);
-    offlineRenderTimeout = setTimeout(() => {
-        processAudioOffline();
-    }, 350);
-};
+// Preview button — renders offline and reloads wsTrim with the baked audio
+if (btnPreviewRoomFx) {
+    btnPreviewRoomFx.addEventListener('click', async () => {
+        if (!wsTrim || !chkRoomEffects?.checked) return;
 
-if (reverbMixSlider) {
-    reverbMixSlider.addEventListener('input', (e) => {
-        if (lblReverbMix) lblReverbMix.textContent = `${e.target.value}%`;
-        if (chkRoomEffects.checked) updateEffectsLive();
-        else checkIfStateChanged(); // just to enable Apply button
-    });
-}
-if (reverbSizeSlider) {
-    reverbSizeSlider.addEventListener('input', (e) => {
-        if (lblReverbSize) lblReverbSize.textContent = `${e.target.value}%`;
-        if (chkRoomEffects.checked) updateEffectsLive();
-        else checkIfStateChanged();
-    });
-}
-if (echoDelaySlider) {
-    echoDelaySlider.addEventListener('input', (e) => {
-        if (lblEchoDelay) lblEchoDelay.textContent = `${parseFloat(e.target.value).toFixed(1)}s`;
-        if (chkRoomEffects.checked) updateEffectsLive();
-        else checkIfStateChanged();
-    });
-}
-if (echoFeedbackSlider) {
-    echoFeedbackSlider.addEventListener('input', (e) => {
-        if (lblEchoFeedback) lblEchoFeedback.textContent = `${e.target.value}%`;
-        if (chkRoomEffects.checked) updateEffectsLive();
-        else checkIfStateChanged();
+        const spaceSize = parseInt(spaceSizeSlider?.value ?? 40, 10);
+        const echoDecay = parseInt(echoDecaySlider?.value ?? 30, 10);
+
+        // Show loading state
+        btnPreviewRoomFx.disabled = true;
+        btnPreviewRoomFx.textContent = '⏳ Renderizando...';
+        if (lblRoomFxStatus) { lblRoomFxStatus.textContent = 'Procesando audio offline (esto puede tardar unos segundos)...'; lblRoomFxStatus.classList.remove('hidden'); }
+
+        try {
+            const baseUrl = audioUrlGlobal; // always use original (not reversed) as source for effects
+            const newUrl  = await renderRoomEffectsOffline(baseUrl, spaceSize, echoDecay, trimStartTime, trimEndTime);
+
+            // Revoke old rendered URL to free memory
+            if (roomFxUrl) URL.revokeObjectURL(roomFxUrl);
+            roomFxUrl = newUrl;
+
+            // Load rendered audio into wsTrim
+            const wasPlaying = wsTrim.isPlaying();
+            if (wasPlaying) wsTrim.pause();
+            wsTrim.once('decode', () => {
+                wsTrim.setTime(0); // rendered starts at 0 (already trimmed)
+                if (wasPlaying) wsTrim.play();
+            });
+            wsTrim.load(roomFxUrl);
+
+            if (lblRoomFxStatus) lblRoomFxStatus.textContent = '✅ Efecto aplicado. Escucha la previsualización arriba.';
+        } catch (err) {
+            console.error('Room Effects render error:', err);
+            if (lblRoomFxStatus) lblRoomFxStatus.textContent = '❌ Error al renderizar. Intenta de nuevo.';
+        } finally {
+            btnPreviewRoomFx.disabled = false;
+            btnPreviewRoomFx.textContent = '🎧 Previsualizar Efecto';
+        }
     });
 }
 
@@ -1462,10 +1399,8 @@ btnProcess.addEventListener('click', async () => {
                 pitch:        parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
                 reverse:      chkReverseAudio?.checked ?? false,
                 roomEffects:  chkRoomEffects?.checked ?? false,
-                reverbMix:    parseInt(reverbMixSlider?.value ?? 0, 10),
-                reverbSize:   parseInt(reverbSizeSlider?.value ?? 50, 10),
-                echoDelay:    parseFloat(echoDelaySlider?.value ?? 0),
-                echoFeedback: parseInt(echoFeedbackSlider?.value ?? 20, 10),
+                spaceSize:    parseInt(spaceSizeSlider?.value  ?? 40, 10),
+                echoDecay:    parseInt(echoDecaySlider?.value  ?? 30, 10),
             }),
         });
 
