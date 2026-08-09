@@ -406,7 +406,7 @@ function updateTrimProgressUI() {
 /**
  * Apply real-time fade envelope, volume, tempo and pitch to a WaveSurfer instance.
  * Called from the rAF-throttled audioprocess callback — must stay cheap.
- * Room Effects are handled via Offline DSP (renderRoomEffectsOffline) — no Web Audio
+ * Room Effects are handled via Offline DSP (renderAuditoriumOffline) — no Web Audio
  * nodes are attached here to avoid ghost audio after pause.
  * All element references are cached at module level (no getElementById calls).
  */
@@ -1023,25 +1023,125 @@ if (chkReverseAudio) {
 }
 
 
-// ── Room Effects — Offline DSP ────────────────────────────────────────────────
-// All processing is done via OfflineAudioContext so the rendered audio is a
-// normal audio buffer. Pausing stops cleanly (no ghost echo), and the effect
-// is permanently baked into the Blob URL loaded into WaveSurfer.
+// ── Auditorium Effect — 3-Stage Offline DSP ────────────────────────────────────
+// All processing is offline: the rendered AudioBuffer is the final audio.
+// Pausing/stopping the player stops cleanly — no nodes active during playback.
 
 /**
- * Render room effects (space + echo) into a new AudioBuffer using
- * OfflineAudioContext. Returns a Blob URL pointing to a WAV file with the
- * effect baked in for the given time range [start, end].
+ * Build a synthetic Auditorium Impulse Response (IR) in three stages:
  *
- * @param {string}  sourceUrl  - URL of the original audio to process.
- * @param {number}  spaceSize  - 0..100 — room size (maps delay 5ms → 200ms).
- * @param {number}  echoDecay  - 0..100 — feedback/decay (maps 0 → 0.80).
- * @param {number}  startSec   - trim start in seconds.
- * @param {number}  endSec     - trim end in seconds.
- * @returns {Promise<string>}  - Blob URL of the WAV with effects.
+ *   Stage 1 — Predelay  (20–40 ms)
+ *     A silent gap before the first reflection, separating the direct sound
+ *     from the room response.  Encoded as an offset into the IR buffer.
+ *
+ *   Stage 2 — Early Reflections  (6 parallel taps, stereo-asymmetric)
+ *     Discrete reflections from walls, ceiling, floor.  L/R gains are
+ *     deliberately different to create spatial width, mimicking the comb
+ *     pattern of a real concert hall.
+ *
+ *   Stage 3 — Diffuse Reverb Tail  + High-Cut Filter
+ *     Exponentially decaying Gaussian noise (−60 dB at decayTime).
+ *     A 1-pole IIR lowpass (ω = 2π·fc/sr) attenuates frequencies above
+ *     highCutHz, simulating the absorbency of seat fabric, curtains, etc.
+ *
+ * @param {number} sampleRate   — audio sample rate (Hz)
+ * @param {number} predelayMs  — onset gap before first reflection (20–40 ms)
+ * @param {number} decayTime   — reverb T60 in seconds (1.5–2.5 s)
+ * @param {number} highCutHz   — high-shelf cut frequency (6000–8000 Hz)
+ * @returns {AudioBuffer}      — 2-channel IR ready for ConvolverNode
  */
-async function renderRoomEffectsOffline(sourceUrl, spaceSize, echoDecay, startSec, endSec) {
-    // 1. Fetch & decode the full audio
+function buildAuditoriumIR(sampleRate, predelayMs, decayTime, highCutHz) {
+    const pdSamples   = Math.round((predelayMs / 1000) * sampleRate);
+    const tailSamples = Math.ceil(decayTime * sampleRate);
+    const totalLen    = pdSamples + tailSamples;
+
+    const irL = new Float32Array(totalLen);
+    const irR = new Float32Array(totalLen);
+
+    // ── Stage 2: Early Reflections ───────────────────────────────────────────
+    // 6 taps starting at predelay onset. Extra delay in ms from the onset.
+    // gainL / gainR are intentionally asymmetric to create stereo width.
+    const erTaps = [
+        // [extraMs,  gainL, gainR]
+        [  0,  0.82,  0.70 ],   // 1st wall — stronger on L
+        [  9,  0.68,  0.76 ],   // ceiling  — stronger on R
+        [ 18,  0.74,  0.60 ],   // 2nd wall
+        [ 28,  0.52,  0.64 ],
+        [ 42,  0.56,  0.46 ],
+        [ 58,  0.34,  0.50 ],   // late early / floor bounce
+    ];
+
+    for (const [extraMs, gL, gR] of erTaps) {
+        const idx = pdSamples + Math.round((extraMs / 1000) * sampleRate);
+        if (idx < totalLen) {
+            irL[idx] += gL;
+            irR[idx] += gR;
+        }
+    }
+
+    // ── Stage 3a: Diffuse Reverb Tail (exponential Gaussian noise) ───────────
+    // Starts at the predelay onset, fades to −60 dB at decayTime.
+    const k60dB = 6.908 / decayTime;   // e^(-k * T) = 0.001  →  k = ln(1000)/T
+    for (let i = pdSamples; i < totalLen; i++) {
+        const t   = (i - pdSamples) / sampleRate;
+        const env = Math.exp(-t * k60dB);
+        // Gaussian noise approximation: average of 6 uniform samples
+        let nL = 0, nR = 0;
+        for (let j = 0; j < 6; j++) { nL += Math.random(); nR += Math.random(); }
+        irL[i] += ((nL / 3) - 1) * env * 0.28;
+        irR[i] += ((nR / 3) - 1) * env * 0.28;
+    }
+
+    // ── Stage 3b: High-Cut IIR Lowpass ───────────────────────────────────────
+    // 1-pole Butterworth: y[n] = g*x[n] + (1-g)*y[n-1]
+    // where g ≈ 2π·fc / sr  (first-order approximation valid for fc << sr/2)
+    const g = Math.min(0.9999, (2 * Math.PI * highCutHz) / sampleRate);
+    let sL = 0, sR = 0;
+    for (let i = 0; i < totalLen; i++) {
+        sL = sL + g * (irL[i] - sL);
+        sR = sR + g * (irR[i] - sR);
+        irL[i] = sL;
+        irR[i] = sR;
+    }
+
+    // Normalise IR peak to 1.0 so ConvolverNode operates correctly
+    let peak = 0;
+    for (let i = 0; i < totalLen; i++) {
+        if (Math.abs(irL[i]) > peak) peak = Math.abs(irL[i]);
+        if (Math.abs(irR[i]) > peak) peak = Math.abs(irR[i]);
+    }
+    if (peak > 1e-9) {
+        const inv = 1 / peak;
+        for (let i = 0; i < totalLen; i++) { irL[i] *= inv; irR[i] *= inv; }
+    }
+
+    const irBuf = new AudioBuffer({ numberOfChannels: 2, length: totalLen, sampleRate });
+    irBuf.copyToChannel(irL, 0);
+    irBuf.copyToChannel(irR, 1);
+    return irBuf;
+}
+
+/**
+ * Render the Auditorium effect offline into a baked WAV Blob URL.
+ *
+ * Architecture:
+ *   source  ──▶  dryGain  ──────────────────────────▶  destination
+ *   source  ──▶  ConvolverNode (auditorium IR)  ──▶  wetGain  ──▶  destination
+ *
+ * The ConvolverNode uses FFT-based convolution internally (O(N log M)),
+ * which is the only practical way to handle 2+ second reverb tails in JS.
+ * The result is a completely rendered AudioBuffer — no live nodes remain
+ * after the call, so pausing the player always stops audio cleanly.
+ *
+ * @param {string} sourceUrl  — Blob or HTTP URL of the original audio
+ * @param {number} spaceSize  — 0..100  (Tamaño del Espacio slider)
+ * @param {number} echoDecay  — 0..100  (Decaimiento/Eco slider)
+ * @param {number} startSec   — trim region start (seconds)
+ * @param {number} endSec     — trim region end (seconds)
+ * @returns {Promise<string>} — Blob URL of the baked WAV
+ */
+async function renderAuditoriumOffline(sourceUrl, spaceSize, echoDecay, startSec, endSec) {
+    // ── 1. Fetch & decode original audio ─────────────────────────────────────
     const arrayBuf  = await (await fetch(sourceUrl)).arrayBuffer();
     const decodeCtx = new AudioContext();
     const fullBuf   = await decodeCtx.decodeAudioData(arrayBuf);
@@ -1053,62 +1153,73 @@ async function renderRoomEffectsOffline(sourceUrl, spaceSize, echoDecay, startSe
     const endFrame   = Math.min(fullBuf.length, Math.round(endSec * sr));
     const srcFrames  = endFrame - startFrame;
 
-    // 2. Create a trimmed source buffer
-    const trimBuf = new AudioBuffer({ numberOfChannels: numCh, length: srcFrames, sampleRate: sr });
-    for (let c = 0; c < numCh; c++) {
-        trimBuf.copyToChannel(fullBuf.getChannelData(c).subarray(startFrame, endFrame), c);
+    // ── 2. Slice the trimmed segment into a stereo AudioBuffer ───────────────
+    // Always output stereo (2 ch) so the IR (which is stereo) matches.
+    const trimBuf = new AudioBuffer({ numberOfChannels: 2, length: srcFrames, sampleRate: sr });
+    const ch0     = fullBuf.getChannelData(0);
+    const ch1     = numCh > 1 ? fullBuf.getChannelData(1) : ch0;
+    const sliceL  = new Float32Array(srcFrames);
+    const sliceR  = new Float32Array(srcFrames);
+    for (let i = 0; i < srcFrames; i++) {
+        sliceL[i] = ch0[startFrame + i];
+        sliceR[i] = ch1[startFrame + i];
     }
+    trimBuf.copyToChannel(sliceL, 0);
+    trimBuf.copyToChannel(sliceR, 1);
 
-    // 3. Map parameters to DSP values
-    //    spaceSize  0→100  maps to delayTime  5ms → 200ms
-    //    echoDecay  0→100  maps to feedback   0   → 0.80
-    const delayTimeSec = 0.005 + (spaceSize / 100) * 0.195;
-    const feedbackGain = (echoDecay / 100) * 0.80;
-    // Tail: how long echo rings after audio ends (max 6 s)
-    const tailSec = feedbackGain > 0
-        ? Math.min(6, (-delayTimeSec / Math.log(feedbackGain + 1e-9)) * 2.5)
-        : 0.5;
-    const totalFrames = srcFrames + Math.ceil(tailSec * sr);
+    // ── 3. Map UI sliders → acoustic parameters ──────────────────────────────
+    //
+    //  spaceSize  0→100  maps to:
+    //    predelay  20 ms → 40 ms   (separates direct from reflections)
+    //    decayTime  1.5 s → 2.5 s  (reverb T60)
+    //    highCut   8000 Hz → 6000 Hz (material absorbency)
+    //
+    //  echoDecay  0→100  maps to:
+    //    wetGain   0.10 → 0.55     (dry/wet mix of the reverb)
+    //
+    const pct        = spaceSize / 100;
+    const predelayMs = 20  + pct * 20;                         // 20–40 ms
+    const decayTime  = 1.5 + pct * 1.0;                        // 1.5–2.5 s
+    const highCutHz  = 8000 - pct * 2000;                      // 8000–6000 Hz
+    const wetGain    = 0.10 + (echoDecay / 100) * 0.45;        // 0.10–0.55
 
-    // 4. Build OfflineAudioContext graph
-    const offCtx = new OfflineAudioContext(numCh, totalFrames, sr);
+    // ── 4. Build the Auditorium Impulse Response ──────────────────────────────
+    const ir = buildAuditoriumIR(sr, predelayMs, decayTime, highCutHz);
 
-    const src       = offCtx.createBufferSource();
-    src.buffer      = trimBuf;
+    // ── 5. Offline render — source convolved with IR ──────────────────────────
+    const totalFrames = srcFrames + ir.length;  // includes reverb tail
+    const offCtx      = new OfflineAudioContext(2, totalFrames, sr);
 
-    const dryGain   = offCtx.createGain();
-    dryGain.gain.value = 1.0;
+    const srcNode  = offCtx.createBufferSource();
+    srcNode.buffer = trimBuf;
 
-    const wetGain   = offCtx.createGain();
-    // Wet mix scales with decay so a value of 0 = completely dry
-    wetGain.gain.value = feedbackGain > 0 ? Math.min(0.85, feedbackGain * 1.05) : 0;
+    const convNode  = offCtx.createConvolver();
+    convNode.buffer    = ir;
+    convNode.normalize = false;  // we normalised the IR manually
 
-    const delayNode = offCtx.createDelay(3.0);
-    delayNode.delayTime.value = delayTimeSec;
+    const dryNode = offCtx.createGain();
+    dryNode.gain.value = 1.0;   // dry stays full-volume
 
-    const fbGain    = offCtx.createGain();
-    fbGain.gain.value = feedbackGain;
+    const wetNode = offCtx.createGain();
+    wetNode.gain.value = wetGain;  // wet controlled by Decaimiento slider
 
-    // Graph: src → dry → out
-    //        src → delay → wet → out
-    //        delay → fbGain → delay  (echo feedback loop)
-    src.connect(dryGain);
-    dryGain.connect(offCtx.destination);
+    // Routing:
+    //   srcNode ──▶ dryNode ──────────────────────▶ offCtx.destination
+    //   srcNode ──▶ convNode ──▶ wetNode ──────────▶ offCtx.destination
+    srcNode.connect(dryNode);
+    dryNode.connect(offCtx.destination);
 
-    src.connect(delayNode);
-    delayNode.connect(fbGain);
-    fbGain.connect(delayNode);      // feedback loop
-    delayNode.connect(wetGain);
-    wetGain.connect(offCtx.destination);
+    srcNode.connect(convNode);
+    convNode.connect(wetNode);
+    wetNode.connect(offCtx.destination);
 
-    // 5. Render
-    src.start(0);
+    srcNode.start(0);
     const rendered = await offCtx.startRendering();
 
-    // 6. Encode to WAV using the existing audioBufferToWav helper
-    const blob = audioBufferToWav(rendered);
-    return URL.createObjectURL(blob);
+    // ── 6. Encode to WAV (uses existing audioBufferToWav helper) ─────────────
+    return URL.createObjectURL(audioBufferToWav(rendered));
 }
+
 
 // Checkbox — enable / disable the controls panel
 if (chkRoomEffects) {
@@ -1163,8 +1274,8 @@ if (btnPreviewRoomFx) {
         if (lblRoomFxStatus) { lblRoomFxStatus.textContent = 'Procesando audio offline (esto puede tardar unos segundos)...'; lblRoomFxStatus.classList.remove('hidden'); }
 
         try {
-            const baseUrl = audioUrlGlobal; // always use original (not reversed) as source for effects
-            const newUrl  = await renderRoomEffectsOffline(baseUrl, spaceSize, echoDecay, trimStartTime, trimEndTime);
+            const baseUrl = audioUrlGlobal; // always use original as source for effects
+            const newUrl  = await renderAuditoriumOffline(baseUrl, spaceSize, echoDecay, trimStartTime, trimEndTime);
 
             // Revoke old rendered URL to free memory
             if (roomFxUrl) URL.revokeObjectURL(roomFxUrl);

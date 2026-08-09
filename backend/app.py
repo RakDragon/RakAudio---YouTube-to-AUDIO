@@ -266,21 +266,51 @@ def process_audio():
             stream = ffmpeg.filter(stream, "areverse")
 
         if room_effects:
-            # Mirror the frontend OfflineAudioContext DSP math:
-            #   spaceSize 0→100  ↦  delay_ms  5ms → 200ms
-            #   echoDecay  0→100  ↦  feedback  0   → 0.80
-            delay_ms     = int(5 + (space_size / 100.0) * 195)          # 5–200 ms
-            feedback_raw = (echo_decay / 100.0) * 0.80                  # 0–0.80
-            feedback     = round(max(0.01, feedback_raw), 3)
-            wet_gain     = round(min(0.85, feedback_raw * 1.05), 3) if feedback_raw > 0 else 0
-            if wet_gain > 0:
-                stream = ffmpeg.filter(
-                    stream, "aecho",
-                    0.8,          # in_gain  (dry input level)
-                    wet_gain,     # out_gain (wet output level — matches JS wetGain.gain)
-                    delay_ms,     # delay(s) in ms
-                    feedback,     # decay(s) — matches JS fbGain.gain
-                )
+            # ── Mirror the frontend 3-stage Auditorium DSP algorithm ──────────
+            #
+            #   spaceSize 0→100  →  predelay_ms 20→40 ms
+            #                       decay_time  1.5→2.5 s
+            #                       high_cut_hz 8000→6000 Hz
+            #   echoDecay 0→100  →  wet_level   0.10→0.55
+            #
+            pct         = space_size / 100.0
+            predelay_ms = round(20 + pct * 20)               # 20–40 ms
+            decay_time  = 1.5 + pct * 1.0                    # 1.5–2.5 s
+            high_cut_hz = round(8000 - pct * 2000)           # 8000–6000 Hz
+            wet_level   = round(0.10 + (echo_decay / 100.0) * 0.45, 3)  # 0.10–0.55
+
+            # Stage 1+2: Predelay + 6-tap Early Reflections
+            #   tap offsets mirror JS erTaps: [0, 9, 18, 28, 42, 58] ms from predelay onset
+            er_offsets = [0, 9, 18, 28, 42, 58]
+            er_decays  = [0.82, 0.68, 0.74, 0.52, 0.56, 0.34]
+            er_delays  = "|".join(str(predelay_ms + d) for d in er_offsets)
+            er_decay_s = "|".join(str(d) for d in er_decays)
+            stream = ffmpeg.filter(
+                stream, "aecho",
+                0.8,                  # in_gain  (dry signal level)
+                round(wet_level * 0.65, 3),  # out_gain for early reflections
+                er_delays,            # pipe-separated delays in ms
+                er_decay_s,           # pipe-separated decay (gain) per tap
+            )
+
+            # Stage 3: Diffuse Reverb Tail — long staggered echoes simulating
+            #          diffuse energy build-up (approximates exponential decay)
+            tail_d1 = round(decay_time * 300)   # ~30–75% of decay_time in ms * 1000 / 10
+            tail_d2 = round(decay_time * 450)
+            tail_d3 = round(decay_time * 650)
+            tail_d4 = round(decay_time * 900)
+            stream = ffmpeg.filter(
+                stream, "aecho",
+                0.9,                  # in_gain
+                round(wet_level * 0.50, 3),  # out_gain for reverb tail
+                f"{tail_d1}|{tail_d2}|{tail_d3}|{tail_d4}",
+                "0.48|0.38|0.28|0.18",
+            )
+
+            # Stage 3b: High-Cut lowpass filter (6–8 kHz, 2-pole Butterworth)
+            #           simulates acoustic absorption of large-hall surfaces
+            stream = ffmpeg.filter(stream, "lowpass", f=high_cut_hz, p=2)
+
 
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)
