@@ -6,17 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RakAUDIO</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/wavesurfer.js@7"></script>
-    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
-    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="css/styles.css?v=3">
-    <style>
-        /* FLIP HORIZONTAL DEL ESPECTRO DE AUDIO EN REVERSE */
-        .spectrum-reversed canvas,
-        .spectrum-reversed svg {
-            transform: scaleX(-1) !important;
-        }
-    </style>
+    <!-- .spectrum-reversed is defined in css/styles.css — no inline duplicate needed -->
 </head>
 
 <body class="bg-[#1a1a1a] text-white min-h-screen font-sans">
@@ -119,34 +113,22 @@
 
         <div id="trimModal"
             class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-3 md:p-6 z-50">
-            <div class="bg-[#2B2B2B] p-6 md:p-8 rounded-xl w-full max-w-6xl shadow-2xl border border-[#444] flex flex-col h-[88vh] max-h-[850px] overflow-hidden">
+            <div class="bg-[#2B2B2B] p-5 md:p-6 rounded-xl w-full max-w-[1400px] shadow-2xl border border-[#444] flex flex-col h-[95vh] max-h-[950px] overflow-hidden">
                 
-                <div class="relative mb-6 border-b border-[#444] pb-4 flex justify-center items-center flex-shrink-0">
+                <div class="relative mb-4 border-b border-[#444] pb-3 flex justify-center items-center flex-shrink-0">
                     <h3 class="text-2xl md:text-3xl font-bold text-white absolute left-1/2 transform -translate-x-1/2 tracking-wider">MÁS HERRAMIENTAS</h3>
                     <button id="btnCloseTrim" class="text-white opacity-60 hover:opacity-100 hover:text-[#FF422E] text-3xl transition ml-auto">&times;</button>
                 </div>
 
-                <div class="flex flex-col md:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
-                    <!-- Menú Vertical Lateral Izquierdo -->
-                    <div class="w-full md:w-64 flex flex-row md:flex-col gap-2.5 border-b md:border-b-0 md:border-r border-[#444] pb-4 md:pb-0 md:pr-5 flex-shrink-0">
-                        <button id="tabTrim" class="sidebar-tab active flex items-center gap-2 text-left px-4 py-3.5 rounded-lg font-bold text-xs md:text-sm bg-[#FF422E] text-white transition shadow-md">
-                            RECORTE DE AUDIO
-                        </button>
-                        <button id="tabFade" class="sidebar-tab flex items-center gap-2 text-left px-4 py-3.5 rounded-lg font-bold text-xs md:text-sm bg-[#1f1f1f] text-gray-300 hover:bg-[#3b3b3b] hover:text-white transition">
-                            CONTROLES DE FADE
-                        </button>
-                        <button id="tabAudio" class="sidebar-tab flex items-center gap-2 text-left px-4 py-3.5 rounded-lg font-bold text-xs md:text-sm bg-[#1f1f1f] text-gray-300 hover:bg-[#3b3b3b] hover:text-white transition">
-                            AJUSTES DE AUDIO
-                        </button>
-                    </div>
-
-                    <!-- Panel Principal de Secciones -->
-                    <div class="flex-1 space-y-6 overflow-y-auto pr-2 h-full" id="modalSectionsContainer">
-                        <!-- 1. Sección Recorte de Audio -->
-                        <div id="secTrim" class="modal-section bg-[#222222] p-5 rounded-lg border border-[#333]">
-                            <h4 class="font-bold text-[#FF422E] mb-4 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-2">Recorte de Audio</h4>
+                <div class="flex-1 min-h-0 overflow-hidden mt-1">
+                    <!-- Panel Principal de Secciones en Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-2 h-full" id="modalSectionsContainer">
+                        
+                        <!-- Columna 1: Recorte de Audio -->
+                        <div id="secTrim" class="bg-[#222222] p-4 rounded-lg flex flex-col h-full">
+                            <h4 class="font-bold text-[#FF422E] mb-3 uppercase text-sm tracking-widest">Recorte de Audio</h4>
                             
-                            <div class="flex justify-between items-center text-sm mb-3 font-mono text-white">
+                            <div class="flex justify-between items-center text-sm mb-2 font-mono text-white">
                                 <span>Inicio: 
                                     <input type="number" id="inpStart" class="bg-transparent font-bold text-[#FF422E] w-20 text-center border-b border-gray-600 focus:outline-none focus:border-[#FF422E] text-base" step="0.01" min="0" value="0.00">s
                                 </span>
@@ -156,126 +138,148 @@
                                 </span>
                             </div>
 
-                            <div id="waveformTrimContainer" class="w-full bg-[#1f1f1f] rounded-lg border border-[#444] h-44 relative mb-5">
-                                <div id="waveformTrim" class="w-full h-full"></div>
+                            <div id="waveformTrimContainer" class="w-full bg-[#1f1f1f] rounded-lg border border-[#444] h-[160px] relative mb-3">
+                                <div id="waveformTrim" class="w-full h-full absolute inset-0"></div>
                             </div>
 
-                            <div class="bg-[#1f1f1f] p-4 rounded border border-[#444] text-sm">
-                                <p class="font-bold text-white mb-3 border-b border-[#3b3b3b] pb-2 flex items-center flex-wrap gap-2">
+                            <div class="bg-[#1f1f1f] p-3 rounded border border-[#444] text-sm">
+                                <p class="font-bold text-white mb-2 border-b border-[#3b3b3b] pb-2 flex items-center flex-wrap gap-2">
                                     Atajos de teclado
                                     <span id="activeModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#444444] text-white transition-all shadow-[0_0_8px_rgba(255,255,255,0.2)]">Moviendo Cabezal (2)</span>
                                 </p>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-6 text-white opacity-90 font-mono text-xs">
-                                    <div class="space-y-4">
-                                        <div><kbd id="k-1">1</kbd> / <kbd id="k-2">2</kbd> / <kbd id="k-3">3</kbd> <span class="desc-text" id="t-foco">Foco Límite Izq / Cabezal / Der</span></div>
-                                        <div><kbd id="k-up">↑</kbd> / <kbd id="k-down">↓</kbd> <span class="desc-text" id="t-vol">Subir / Bajar Volumen</span></div>
-                                        <div><kbd id="k-shift-5">Shift</kbd> + <kbd id="k-left-5">←</kbd> / <kbd id="k-right-5">→</kbd> <span class="desc-text" id="t-5s">Retroceder / Avanzar 5s</span></div>
-                                        <div><kbd id="k-ctrl-ms">Ctrl</kbd> + <kbd id="k-shift-ms">Shift</kbd> + <kbd id="k-left-ms">←</kbd> / <kbd id="k-right-ms">→</kbd> <span class="desc-text" id="t-ms">Ajuste Fino (0.01s)</span></div>
+                                <div class="flex flex-col gap-3 text-white opacity-90 font-mono text-sm">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-space">Espacio</kbd></span>
+                                        <span class="desc-text text-right" id="t-play">Play / Pausa</span>
                                     </div>
-                                    <div class="space-y-4">
-                                        <div><kbd id="k-space">Espacio</kbd> <span class="desc-text" id="t-play">Play / Pausa</span></div>
-                                        <div><kbd id="k-left-10">←</kbd> / <kbd id="k-right-10">→</kbd> <span class="desc-text" id="t-10s">Retroceder / Avanzar 10s</span></div>
-                                        <div><kbd id="k-ctrl-1">Ctrl</kbd> + <kbd id="k-left-1">←</kbd> / <kbd id="k-right-1">→</kbd> <span class="desc-text" id="t-1s">Retroceder / Avanzar 1s</span></div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-1">1</kbd> / <kbd id="k-2">2</kbd> / <kbd id="k-3">3</kbd></span>
+                                        <span class="desc-text text-right" id="t-foco">Foco Límite Izq / Cabezal / Der</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-left-10">←</kbd> / <kbd id="k-right-10">→</kbd></span>
+                                        <span class="desc-text text-right" id="t-10s">Retroceder / Avanzar 10s</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-shift-5">Shift</kbd> + <kbd id="k-left-5">←</kbd> / <kbd id="k-right-5">→</kbd></span>
+                                        <span class="desc-text text-right" id="t-5s">Retroceder / Avanzar 5s</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-ctrl-1">Ctrl</kbd> + <kbd id="k-left-1">←</kbd> / <kbd id="k-right-1">→</kbd></span>
+                                        <span class="desc-text text-right" id="t-1s">Retroceder / Avanzar 1s</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-up">↑</kbd> / <kbd id="k-down">↓</kbd></span>
+                                        <span class="desc-text text-right" id="t-vol">Subir / Bajar Volumen</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-1 shrink-0"><kbd id="k-ctrl-ms">Ctrl</kbd> + <kbd id="k-shift-ms">Shift</kbd> + <kbd id="k-left-ms">←</kbd> / <kbd id="k-right-ms">→</kbd></span>
+                                        <span class="desc-text text-right" id="t-ms">Ajuste Fino (0.01s)</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 2. Sección Controles de Fade -->
-                        <div id="secFade" class="modal-section bg-[#222222] p-4 rounded border border-[#333] text-white">
-                            <h4 class="font-bold text-[#FFFFFF] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Controles de Fade</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label class="block text-sm font-bold mb-2 flex justify-between items-center">
-                                        <span>Fade In (Segundos):</span> 
-                                        <span id="lblFadeInG" class="text-[#FF422E] font-bold font-mono">0s</span>
-                                    </label>
-                                    <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-bold mb-2 flex justify-between items-center">
-                                        <span>Fade Out (Segundos):</span> 
-                                        <span id="lblFadeOutG" class="text-[#FF422E] font-bold font-mono">0s</span>
-                                    </label>
-                                    <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 3. Sección Ajustes de Audio -->
-                        <div id="secAudio" class="modal-section bg-[#222222] p-4 rounded border border-[#333] text-white space-y-5">
-                            <h4 class="font-bold text-[#FF422E] mb-3 uppercase text-sm tracking-widest border-b border-[#3b3b3b] pb-1">Ajustes de Audio</h4>
+                        <!-- Columna 2: Fade y Ajustes de Audio -->
+                        <div class="flex flex-col gap-3 h-full">
                             
-                            <!-- Ajustar volumen -->
-                            <div class="bg-[#1f1f1f] p-3.5 rounded border border-[#444] flex flex-wrap items-center justify-between gap-4">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="chkAdjustVol" class="w-4 h-4 accent-[#FF422E]">
-                                    <span class="text-white text-sm font-bold">Ajustar volumen manual</span>
-                                </label>
-                                <div class="flex items-center gap-3 flex-1 max-w-xs">
-                                    <input type="range" id="volAdjustSlider" min="0" max="2" step="0.05" value="1" class="w-full opacity-50 pointer-events-none" disabled>
-                                    <span id="lblVolAdjust" class="text-white font-mono text-xs opacity-50 w-10 text-right">100%</span>
-                                </div>
-                            </div>
-
-                            <!-- Velocidad del audio (Slider) -->
-                            <div class="bg-[#1f1f1f] p-3.5 rounded border border-[#444]">
-                                <label class="block text-sm font-bold mb-2 flex justify-between items-center">
-                                    <span>Velocidad del Audio (Tempo):</span>
-                                    <span id="lblTempoValue" class="text-[#FF422E] font-bold font-mono">1.00x</span>
-                                </label>
-                                <input type="range" id="tempoSlider" min="0.5" max="2.0" step="0.05" value="1.0" class="w-full">
-                                <div class="flex justify-between text-[10px] text-gray-400 font-mono mt-1">
-                                    <span>0.5x (Lento)</span>
-                                    <span>1.0x (Normal)</span>
-                                    <span>2.0x (Rápido)</span>
-                                </div>
-                            </div>
-
-                            <!-- Normalizar EBU R128 -->
-                            <div class="bg-[#1f1f1f] p-3.5 rounded border border-[#444]">
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <input type="checkbox" id="chkNormalizeVolModal" class="w-4 h-4 accent-[#FF422E]">
+                            <!-- 2. Sección Controles de Fade -->
+                            <div id="secFade" class="bg-[#222222] p-4 rounded-lg text-white">
+                                <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Controles de Fade</h4>
+                                <div class="grid grid-cols-1 gap-3">
                                     <div>
-                                        <span class="text-white text-sm font-bold block">Normalizar Volumen (EBU R128)</span>
-                                        <span class="text-xs text-gray-400 block">Iguala el volumen sonoro estándar sin distorsión</span>
+                                        <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                            <span>Fade In (Segundos):</span> 
+                                            <span id="lblFadeInG" class="text-[#FF422E] font-bold font-mono">0s</span>
+                                        </label>
+                                        <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
                                     </div>
-                                </label>
-                            </div>
-
-                            <!-- Cambio de Tono (Pitch) -->
-                            <div class="bg-[#1f1f1f] p-3.5 rounded border border-[#444]">
-                                <label class="block text-sm font-bold mb-2 flex justify-between items-center">
-                                    <span>Cambio de Tono (Pitch):</span>
-                                    <span id="lblPitchValue" class="text-[#FF422E] font-bold font-mono">0 semitonos</span>
-                                </label>
-                                <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0" class="w-full">
-                                <div class="flex justify-between text-[10px] text-gray-400 font-mono mt-1">
-                                    <span>-12 (Grave)</span>
-                                    <span>0 (Original)</span>
-                                    <span>+12 (Agudo)</span>
+                                    <div>
+                                        <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                            <span>Fade Out (Segundos):</span> 
+                                            <span id="lblFadeOutG" class="text-[#FF422E] font-bold font-mono">0s</span>
+                                        </label>
+                                        <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Audio Reverse (Efecto Reversa) -->
-                            <div class="bg-[#1f1f1f] p-3.5 rounded border border-[#444]">
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <input type="checkbox" id="chkReverseAudio" class="w-4 h-4 accent-[#FF422E]">
-                                    <div>
-                                        <span class="text-white text-sm font-bold block">Audio Reverse (Invertir Audio)</span>
-                                        <span class="text-xs text-gray-400 block">Reproduce y exporta el audio al revés de fin a inicio</span>
+                            <!-- 3. Sección Ajustes de Audio -->
+                            <div id="secAudio" class="bg-[#222222] p-4 rounded-lg text-white space-y-2 flex-1">
+                                <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Ajustes de Audio</h4>
+                                
+                                <!-- Ajustar volumen -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex flex-wrap items-center justify-between gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="chkAdjustVol" class="w-4 h-4 accent-[#FF422E]">
+                                        <span class="text-white text-sm font-bold">Ajustar volumen manual</span>
+                                    </label>
+                                    <div class="flex items-center gap-3 flex-1 max-w-xs">
+                                        <input type="range" id="volAdjustSlider" min="0" max="2" step="0.05" value="1" class="w-full opacity-50 pointer-events-none" disabled>
+                                        <span id="lblVolAdjust" class="text-white font-mono text-xs opacity-50 w-10 text-right">100%</span>
                                     </div>
-                                </label>
+                                </div>
+
+                                <!-- Velocidad del audio (Slider) -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                    <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                        <span>Velocidad del Audio (Tempo):</span>
+                                        <span id="lblTempoValue" class="text-[#FF422E] font-bold font-mono">1.00x</span>
+                                    </label>
+                                    <input type="range" id="tempoSlider" min="0.5" max="2.0" step="0.05" value="1.0" class="w-full">
+                                    <div class="flex justify-between text-[10px] text-gray-400 font-mono mt-1">
+                                        <span>0.5x (Lento)</span>
+                                        <span>1.0x (Normal)</span>
+                                        <span>2.0x (Rápido)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Normalizar EBU R128 -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                    <label class="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" id="chkNormalizeVolModal" class="w-4 h-4 accent-[#FF422E]">
+                                        <div>
+                                            <span class="text-white text-sm font-bold block">Normalizar Volumen (EBU R128)</span>
+                                            <span class="text-xs text-gray-400 block">Iguala el volumen sonoro estándar sin distorsión</span>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <!-- Cambio de Tono (Pitch) -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                    <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                        <span>Cambio de Tono (Pitch):</span>
+                                        <span id="lblPitchValue" class="text-[#FF422E] font-bold font-mono">0 semitonos</span>
+                                    </label>
+                                    <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0" class="w-full">
+                                    <div class="flex justify-between text-[10px] text-gray-400 font-mono mt-1">
+                                        <span>-12 (Grave)</span>
+                                        <span>0 (Original)</span>
+                                        <span>+12 (Agudo)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Audio Reverse (Efecto Reversa) -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                    <label class="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" id="chkReverseAudio" class="w-4 h-4 accent-[#FF422E]">
+                                        <div>
+                                            <span class="text-white text-sm font-bold block">Audio Reverse (Invertir Audio)</span>
+                                            <span class="text-xs text-gray-400 block">Reproduce y exporta el audio al revés de fin a inicio</span>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
                         </div>
+                        
                     </div>
                 </div>
 
-                <div class="flex justify-between items-center mt-4 border-t border-[#444] pt-4 flex-shrink-0">
-                    <button id="btnPlayTrim" class="px-6 py-2 rounded flex items-center justify-center text-white transition font-bold shadow-md">
+                <div class="flex justify-start items-center gap-4 mt-6 flex-shrink-0">
+                    <button id="btnPlayTrim" class="px-6 py-2.5 bg-[#4c4c4c] hover:bg-[#5a5a5a] rounded flex items-center justify-center text-white transition font-bold shadow-md">
                         <span id="lblPlayTrim">Escuchar Selección</span>
                     </button>
-                    <button id="btnApplyTrim" class="bg-[#FF422E] px-8 py-2 rounded font-bold text-white transition opacity-40 cursor-not-allowed pointer-events-none" disabled>
+                    <button id="btnApplyTrim" class="bg-[#FF422E] hover:bg-[#d43726] px-8 py-2.5 rounded font-bold text-white transition opacity-40 cursor-not-allowed pointer-events-none" disabled>
                         Aplicar
                     </button>
                 </div>
