@@ -278,44 +278,18 @@
                                         </div>
                                     </label>
                                 </div>
-                            </div>
 
-                            <!-- 4. Sección Efectos de Sala (Offline DSP) -->
-                            <div id="secEffects" class="bg-[#222222] p-4 rounded-lg text-white">
-                                <label class="flex items-center gap-2 cursor-pointer mb-3">
-                                    <input type="checkbox" id="chkRoomEffects" class="w-4 h-4 accent-[#FF422E]">
-                                    <h4 class="font-bold text-[#FF422E] uppercase text-sm tracking-widest">Efectos de Sala / Antro</h4>
-                                </label>
-
-                                <div id="roomEffectsControls" class="opacity-50 pointer-events-none transition-opacity space-y-3">
-                                    <!-- Tamaño del Espacio -->
-                                    <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
-                                        <label class="block text-xs font-bold mb-1 flex justify-between items-center">
-                                            <span>🏛️ Tamaño del Espacio:</span>
-                                            <span id="lblSpaceSize" class="text-[#FF422E] font-mono">40%</span>
-                                        </label>
-                                        <input type="range" id="spaceSizeSlider" min="0" max="100" step="1" value="40" class="w-full">
-                                        <p class="text-gray-500 text-xs mt-1">Cuarto pequeño → sala grande → catedral / espacio abierto</p>
-                                    </div>
-
-                                    <!-- Decaimiento / Eco -->
-                                    <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
-                                        <label class="block text-xs font-bold mb-1 flex justify-between items-center">
-                                            <span>🌊 Decaimiento / Eco:</span>
-                                            <span id="lblEchoDecay" class="text-[#FF422E] font-mono">30%</span>
-                                        </label>
-                                        <input type="range" id="echoDecaySlider" min="0" max="100" step="1" value="30" class="w-full">
-                                        <p class="text-gray-500 text-xs mt-1">Persistencia del sonido: seco → eco suave → eco prolongado</p>
-                                    </div>
-
-                                    <!-- Botón Previsualizar (Offline DSP) -->
-                                    <button id="btnPreviewRoomFx" class="w-full py-2 bg-[#1f1f1f] border border-[#FF422E] text-[#FF422E] hover:bg-[#FF422E] hover:text-white text-sm font-bold rounded transition-all duration-200">
-                                        🎧 Previsualizar Efecto
-                                    </button>
-                                    <p id="lblRoomFxStatus" class="text-xs text-gray-500 text-center hidden">Renderizando efecto...</p>
+                                <!-- Efecto Auditorio -->
+                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                    <label class="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" id="chkAuditoriumReverb" class="w-4 h-4 accent-[#FF422E]">
+                                        <div>
+                                            <span class="text-white text-sm font-bold block">Efecto Auditorio</span>
+                                            <span class="text-xs text-gray-400 block">Simula la acústica de un auditorio — Predelay · Early Reflections · Reverb Natural (solo exportación)</span>
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
-
                         </div>
                         
                     </div>
