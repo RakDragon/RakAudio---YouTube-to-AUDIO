@@ -730,12 +730,11 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
         metaViews.textContent    = parseInt(data.views, 10).toLocaleString(); // E2: radix
         metaDate.textContent     = data.uploadDate;
         metaThumb.src            = data.thumbnailUrl;
-        metaDuration.textContent = formatTime(data.duration);
+        
+        const metadataBg = document.getElementById('metadataBg');
+        if (metadataBg) metadataBg.style.backgroundImage = `url('${data.thumbnailUrl}')`;
 
-        // Acrylic background: set CSS variable with the thumbnail URL
-        metadataSection.style.setProperty('--thumb-url', `url("${data.thumbnailUrl}")`);
-        const acrylicBg = document.getElementById('metaAcrylicBg');
-        if (acrylicBg) acrylicBg.style.backgroundImage = `url("${data.thumbnailUrl}")`;
+        metaDuration.textContent = formatTime(data.duration);
 
         videoDuration = data.duration;
         trimStartTime = 0;
