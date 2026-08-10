@@ -1369,6 +1369,9 @@ btnProcess.addEventListener('click', async () => {
                 pitch:        parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
                 reverse:      chkReverseAudio?.checked ?? false,
                 auditorium:   chkAuditorium?.checked ?? false,
+                eight_d:       chk8D?.checked ?? false,
+                eight_d_dir:   sel8DDir?.value ?? 'left',
+                eight_d_speed: slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8,
             }),
         });
 
