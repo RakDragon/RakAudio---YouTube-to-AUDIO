@@ -336,7 +336,6 @@ function resetEditorControls() {
     if (chkAuditorium)        chkAuditorium.checked        = false;
     
     if (chk8D) chk8D.checked = false;
-    if (controls8D) controls8D.classList.add('hidden');
     if (card8D) card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
     if (sel8DDir) sel8DDir.value = 'left';
     if (slide8DSpeed) { slide8DSpeed.value = 8; if (lbl8DSpeed) lbl8DSpeed.textContent = '8s'; }
