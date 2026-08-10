@@ -540,14 +540,18 @@ function apply8D(ws, isGlobalEdited) {
 
     if (ws._8d && ws._8d !== 'failed') {
         ws._8d.isActive = shouldApply;
-        if (shouldApply) {
-            try { ws._8d.source.disconnect(); } catch(e){}
-            ws._8d.source.connect(ws._8d.panner);
-            if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
-        } else {
-            // Bypass
-            try { ws._8d.source.disconnect(); } catch(e){}
-            ws._8d.source.connect(ws._8d.ctx.destination);
+        
+        if (ws._8d.isCurrentlyApplied !== shouldApply) {
+            ws._8d.isCurrentlyApplied = shouldApply;
+            if (shouldApply) {
+                try { ws._8d.source.disconnect(); } catch(e){}
+                ws._8d.source.connect(ws._8d.panner);
+                if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
+            } else {
+                // Bypass
+                try { ws._8d.source.disconnect(); } catch(e){}
+                ws._8d.source.connect(ws._8d.ctx.destination);
+            }
         }
     }
 }
@@ -692,9 +696,8 @@ function setGlobalView(edited) {
                     if (needsSwitch || newTime !== curTime) wsGlobal.setTime(newTime);
                     applyLiveAudioMath(wsGlobal, true);
                 } else {
-                    try { wsGlobal.setPlaybackRate(1.0, true); } catch {}
-                    wsGlobal.setVolume(globalVolValue);
                     if (needsSwitch) wsGlobal.setTime(curTime);
+                    applyLiveAudioMath(wsGlobal, false);
                 }
                 if (wasPlaying) {
                     wsGlobal.play().finally(() => requestAnimationFrame(finalize));
@@ -777,7 +780,7 @@ function initWaveSurfer() {
                     applyLiveAudioMath(wsGlobal, true);
                 }
             } else {
-                wsGlobal.setVolume(globalVolValue);
+                applyLiveAudioMath(wsGlobal, false);
             }
         });
     });
