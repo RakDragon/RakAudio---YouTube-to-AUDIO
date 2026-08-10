@@ -234,30 +234,40 @@ function renderHistory() {
 
     list.forEach(item => {
         const div = document.createElement('div');
-        div.className = 'bg-[#1f1f1f] p-3 rounded-lg border border-[#444] flex items-center gap-3 hover:border-[#FF422E] transition group';
+        div.className = 'relative overflow-hidden p-3 rounded-lg border border-[#444] hover:border-[#FF422E] transition group';
+
+        const blurBg = document.createElement('div');
+        blurBg.className = 'absolute inset-0 bg-cover bg-center blur-md opacity-40 z-0 transition group-hover:opacity-60';
+        blurBg.style.backgroundImage = `url('${item.thumbnailUrl || ''}')`;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-gradient-to-r from-black/80 to-black/60 z-0';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'relative z-10 flex items-center gap-3 w-full';
 
         const img = document.createElement('img');
         img.src = item.thumbnailUrl || '';
         img.alt = 'Portada';
-        img.className = 'w-20 h-14 object-cover rounded border border-[#333]';
+        img.className = 'w-20 h-14 object-cover rounded border border-[#333] shadow-md';
         img.loading = 'lazy';
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'flex-1 min-w-0';
 
         const h4 = document.createElement('h4');
-        h4.className   = 'text-sm font-bold text-white truncate group-hover:text-[#FF422E] transition';
+        h4.className   = 'text-sm font-bold text-white truncate group-hover:text-[#FF422E] transition drop-shadow-md';
         h4.textContent = item.title || 'Sin título';
 
         const p = document.createElement('p');
-        p.className   = 'text-xs text-gray-400 truncate';
+        p.className   = 'text-xs text-gray-300 truncate drop-shadow-md';
         p.textContent = `${item.uploader || 'Desconocido'} • ${formatTime(item.duration)}`;
 
         infoDiv.appendChild(h4);
         infoDiv.appendChild(p);
 
         const btn = document.createElement('button');
-        btn.className   = 'btn-reload-history bg-[#FF422E] hover:bg-[#d43726] px-3 py-1.5 rounded text-xs font-bold text-white transition flex-shrink-0';
+        btn.className   = 'btn-reload-history bg-[#FF422E] hover:bg-[#d43726] px-3 py-1.5 rounded text-xs font-bold text-white transition flex-shrink-0 shadow-md';
         btn.textContent = 'Cargar';
         btn.dataset.url = item.url || '';
         btn.addEventListener('click', (e) => {
@@ -270,9 +280,13 @@ function renderHistory() {
             }
         });
 
-        div.appendChild(img);
-        div.appendChild(infoDiv);
-        div.appendChild(btn);
+        contentDiv.appendChild(img);
+        contentDiv.appendChild(infoDiv);
+        contentDiv.appendChild(btn);
+
+        div.appendChild(blurBg);
+        div.appendChild(overlay);
+        div.appendChild(contentDiv);
         fragment.appendChild(div);
     });
 
