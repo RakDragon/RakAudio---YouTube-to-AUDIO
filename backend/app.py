@@ -267,7 +267,12 @@ def process_audio():
         if eight_d:
             hz = 1.0 / max(4.0, min(20.0, eight_d_speed))
             offset_l, offset_r = ("0", "0.5") if eight_d_dir == "left" else ("0.5", "0")
+            # 1. Ensanchar el estéreo para mayor inmersión
+            stream = ffmpeg.filter(stream, "extrastereo", m=2.5)
+            # 2. Paneo (Rotación Izquierda/Derecha)
             stream = ffmpeg.filter(stream, "apulsator", mode="sine", hz=str(hz), offset_l=offset_l, offset_r=offset_r)
+            # 3. Reverb para añadir profundidad espacial trasera
+            stream = ffmpeg.filter(stream, "aecho", "0.8", "0.9", "1000", "0.3")
 
         if fade_in > 0:
             stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)

@@ -442,7 +442,7 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
     apply8D(ws, isGlobalEdited);
 }
 
-/** Applies Web Audio API nodes for live 8D panning effect. */
+/** Applies Web Audio API nodes for live 8D HRTF panning effect. */
 function apply8D(ws, isGlobalEdited) {
     if (!ws) return;
     const audioEl = ws.getMediaElement();
@@ -456,35 +456,70 @@ function apply8D(ws, isGlobalEdited) {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const source = ctx.createMediaElementSource(audioEl);
-            const panner = ctx.createStereoPanner();
-            const lfo = ctx.createOscillator();
-            lfo.type = 'sine';
             
-            const gain = ctx.createGain();
-            lfo.connect(gain);
-            gain.connect(panner.pan);
-            lfo.start();
-
+            // Reverb (simple delay network to give spatial depth)
+            const delay = ctx.createDelay();
+            delay.delayTime.value = 0.4;
+            const feedback = ctx.createGain();
+            feedback.gain.value = 0.3;
+            delay.connect(feedback);
+            feedback.connect(delay);
+            
+            // True 360 HRTF Panner
+            const panner = ctx.createPanner();
+            panner.panningModel = 'HRTF';
+            panner.distanceModel = 'inverse';
+            panner.refDistance = 1;
+            panner.maxDistance = 10000;
+            panner.rolloffFactor = 1;
+            panner.coneInnerAngle = 360;
+            panner.coneOuterAngle = 360;
+            panner.coneOuterGain = 0;
+            
+            // Connect source -> panner (Dry)
             source.connect(panner);
+            // Connect source -> delay -> panner (Wet)
+            source.connect(delay);
+            delay.connect(panner);
+            
             panner.connect(ctx.destination);
 
-            ws._8d = { ctx, panner, lfo, gain, source };
+            ws._8d = { ctx, panner, delay, feedback, source, raf: null, isActive: false };
+            
+            // Animation loop for smooth 360 rotation
+            const updatePan = () => {
+                if (ws._8d.isActive && !audioEl.paused) {
+                    const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
+                    const dir = sel8DDir ? sel8DDir.value : 'left';
+                    const t = ws.getCurrentTime();
+                    
+                    const mult = dir === 'left' ? -1 : 1;
+                    const angle = (t / speed) * 2 * Math.PI * mult;
+                    
+                    // Exaggerated spatial radius
+                    const radius = 2;
+                    const x = Math.sin(angle) * radius;
+                    const z = Math.cos(angle) * radius;
+                    
+                    ws._8d.panner.positionX.setTargetAtTime(x, ws._8d.ctx.currentTime, 0.05);
+                    ws._8d.panner.positionZ.setTargetAtTime(z, ws._8d.ctx.currentTime, 0.05);
+                }
+                ws._8d.raf = requestAnimationFrame(updatePan);
+            };
+            ws._8d.raf = requestAnimationFrame(updatePan);
+            
         } catch (e) {
-            console.error("No se pudo iniciar AudioContext 8D", e);
+            console.error("No se pudo iniciar AudioContext 8D HRTF", e);
             ws._8d = 'failed';
         }
     }
 
     if (ws._8d && ws._8d !== 'failed') {
+        ws._8d.isActive = shouldApply;
         if (shouldApply) {
-            const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
-            ws._8d.lfo.frequency.value = 1 / speed;
-            
-            const dir = sel8DDir ? sel8DDir.value : 'left';
-            ws._8d.gain.gain.value = (dir === 'left') ? 1 : -1;
-            
             try { ws._8d.source.disconnect(); } catch(e){}
             ws._8d.source.connect(ws._8d.panner);
+            ws._8d.source.connect(ws._8d.delay);
             if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
         } else {
             // Bypass
