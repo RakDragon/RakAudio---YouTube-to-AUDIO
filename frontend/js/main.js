@@ -457,14 +457,6 @@ function apply8D(ws, isGlobalEdited) {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const source = ctx.createMediaElementSource(audioEl);
             
-            // Reverb (simple delay network to give spatial depth)
-            const delay = ctx.createDelay();
-            delay.delayTime.value = 0.4;
-            const feedback = ctx.createGain();
-            feedback.gain.value = 0.3;
-            delay.connect(feedback);
-            feedback.connect(delay);
-            
             // True 360 HRTF Panner
             const panner = ctx.createPanner();
             panner.panningModel = 'HRTF';
@@ -476,15 +468,11 @@ function apply8D(ws, isGlobalEdited) {
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
             
-            // Connect source -> panner (Dry)
+            // Connect source -> panner
             source.connect(panner);
-            // Connect source -> delay -> panner (Wet)
-            source.connect(delay);
-            delay.connect(panner);
-            
             panner.connect(ctx.destination);
 
-            ws._8d = { ctx, panner, delay, feedback, source, raf: null, isActive: false };
+            ws._8d = { ctx, panner, source, raf: null, isActive: false };
             
             // Animation loop for smooth 360 rotation
             const updatePan = () => {
@@ -519,7 +507,6 @@ function apply8D(ws, isGlobalEdited) {
         if (shouldApply) {
             try { ws._8d.source.disconnect(); } catch(e){}
             ws._8d.source.connect(ws._8d.panner);
-            ws._8d.source.connect(ws._8d.delay);
             if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
         } else {
             // Bypass
