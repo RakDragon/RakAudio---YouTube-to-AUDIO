@@ -365,7 +365,10 @@ function checkIfStateChanged() {
         cur.normalizeVol === (prev.normalizeVol || false) &&
         cur.pitch   === (prev.pitch   || 0)     &&
         cur.reverse === (prev.reverse || false) &&
-        cur.auditorium === (prev.auditorium || false);
+        cur.auditorium === (prev.auditorium || false) &&
+        cur.eight_d === (prev.eight_d || false) &&
+        cur.eight_d_dir === (prev.eight_d_dir || 'left') &&
+        Math.abs(cur.eight_d_speed - (prev.eight_d_speed || 8)) < 0.01;
 
     btnApplyTrim.disabled = isSame;
     btnApplyTrim.classList.toggle('opacity-40',          isSame);
@@ -442,8 +445,9 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
 
     ws.setVolume(Math.max(0, Math.min(2.0, vol)));
 
-    const tempoVal    = parseFloat(tempoSlider ? tempoSlider.value : 1.0);
-    const pitchVal    = parseInt(pitchSlider   ? pitchSlider.value : 0, 10); // E2: explicit radix
+    const isEdited = (ws === wsTrim || isGlobalEdited);
+    const tempoVal    = isEdited ? parseFloat(tempoSlider ? tempoSlider.value : 1.0) : 1.0;
+    const pitchVal    = isEdited ? parseInt(pitchSlider   ? pitchSlider.value : 0, 10) : 0;
     const pitchFactor = Math.pow(2, pitchVal / 12);
     const rate        = Math.max(0.25, Math.min(4.0, tempoVal * pitchFactor));
 
@@ -858,6 +862,7 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
             start: 0, end: round2(videoDuration),
             fadeIn: 0, fadeOut: 0, adjustVol: false, volLevel: 1.0,
             tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
+            eight_d: false, eight_d_dir: 'left', eight_d_speed: 8,
         };
 
         resetEditorControls(); // M5: extracted helper
@@ -981,6 +986,57 @@ document.getElementById('btnCloseTrim').addEventListener('click', () => {
     if (btnPlayTrim) btnPlayTrim.style.setProperty('--trim-progress', '0%');
     if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
     trimModal.classList.add('hidden');
+    
+    // Revert UI to lastAppliedState since "Aplicar" was not pressed
+    if (lastAppliedState) {
+        if (chk8D) chk8D.checked = lastAppliedState.eight_d;
+        if (sel8DDir) sel8DDir.value = lastAppliedState.eight_d_dir;
+        if (slide8DSpeed) { 
+            slide8DSpeed.value = lastAppliedState.eight_d_speed; 
+            if (lbl8DSpeed) lbl8DSpeed.textContent = lastAppliedState.eight_d_speed + 's';
+        }
+        if (controls8D) {
+            if (lastAppliedState.eight_d) controls8D.classList.remove('hidden');
+            else controls8D.classList.add('hidden');
+        }
+        if (card8D) {
+            if (lastAppliedState.eight_d) card8D.classList.replace('border-[#444]', 'border-[#FF422E]');
+            else card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
+        }
+        
+        if (tempoSlider) {
+            tempoSlider.value = lastAppliedState.tempo;
+            if (lblTempoValue) lblTempoValue.textContent = lastAppliedState.tempo.toFixed(2) + 'x';
+        }
+        if (pitchSlider) {
+            pitchSlider.value = lastAppliedState.pitch;
+            if (lblPitchValue) lblPitchValue.textContent = lastAppliedState.pitch + ' semitonos';
+        }
+        if (chkReverseAudio) chkReverseAudio.checked = lastAppliedState.reverse;
+        if (chkAuditorium) chkAuditorium.checked = lastAppliedState.auditorium;
+        if (chkNormalizeVolModal) chkNormalizeVolModal.checked = lastAppliedState.normalizeVol;
+        
+        if (chkAdjustVol) chkAdjustVol.checked = lastAppliedState.adjustVol;
+        if (volAdjustSlider) {
+            volAdjustSlider.value = lastAppliedState.volLevel;
+            if (lblVolAdjust) {
+                lblVolAdjust.textContent = Math.round(lastAppliedState.volLevel * 100) + '%';
+                lblVolAdjust.classList.toggle('opacity-50', !lastAppliedState.adjustVol);
+            }
+        }
+        
+        if (fInG) { fInG.value = lastAppliedState.fadeIn; if (lblFadeInG) lblFadeInG.textContent = lastAppliedState.fadeIn + 's'; }
+        if (fOutG) { fOutG.value = lastAppliedState.fadeOut; if (lblFadeOutG) lblFadeOutG.textContent = lastAppliedState.fadeOut + 's'; }
+        
+        trimStartTime = lastAppliedState.start;
+        trimEndTime = lastAppliedState.end;
+        if (inpStart) inpStart.value = trimStartTime.toFixed(2);
+        if (inpEnd) inpEnd.value = trimEndTime.toFixed(2);
+        if (trimRegion) trimRegion.setOptions({ start: trimStartTime, end: trimEndTime });
+        
+        checkIfStateChanged();
+        if (wsGlobal) applyLiveAudioMath(wsGlobal, isEditedViewActive);
+    }
 });
 
 btnApplyTrim.addEventListener('click', () => {
