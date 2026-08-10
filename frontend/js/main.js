@@ -237,11 +237,11 @@ function renderHistory() {
         div.className = 'relative overflow-hidden p-3 rounded-lg border border-[#444] hover:border-[#FF422E] transition group';
 
         const blurBg = document.createElement('div');
-        blurBg.className = 'absolute inset-0 bg-cover bg-center blur-md opacity-40 z-0 transition group-hover:opacity-60';
+        blurBg.className = 'absolute inset-0 bg-cover bg-center blur-md opacity-60 z-0 transition group-hover:opacity-80';
         blurBg.style.backgroundImage = `url('${item.thumbnailUrl || ''}')`;
 
         const overlay = document.createElement('div');
-        overlay.className = 'absolute inset-0 bg-gradient-to-r from-black/80 to-black/60 z-0';
+        overlay.className = 'absolute inset-0 bg-gradient-to-r from-black/50 to-black/20 z-0';
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'relative z-10 flex items-center gap-3 w-full';
