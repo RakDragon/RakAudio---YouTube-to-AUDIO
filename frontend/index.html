@@ -218,7 +218,7 @@
                                 <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Ajustes de Audio</h4>
                                 
                                 <!-- Ajustar volumen -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex flex-wrap items-center justify-between gap-4">
+                                <div id="cardAdjustVol" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex flex-wrap items-center justify-between gap-4 transition-colors">
                                     <label class="flex items-center gap-2 cursor-pointer">
                                         <input type="checkbox" id="chkAdjustVol" class="w-4 h-4 accent-[#FF422E]">
                                         <span class="text-white text-sm font-bold">Ajustar volumen manual</span>
@@ -230,7 +230,7 @@
                                 </div>
 
                                 <!-- Velocidad del audio (Slider) -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                <div id="cardTempo" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] transition-colors">
                                     <label class="block text-sm font-bold mb-1 flex justify-between items-center">
                                         <span>Velocidad del Audio (Tempo):</span>
                                         <span id="lblTempoValue" class="text-[#FF422E] font-bold font-mono">1.00x</span>
@@ -244,7 +244,7 @@
                                 </div>
 
                                 <!-- Normalizar EBU R128 -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                <div id="cardNormalize" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] transition-colors">
                                     <label class="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" id="chkNormalizeVolModal" class="w-4 h-4 accent-[#FF422E]">
                                         <div>
@@ -255,7 +255,7 @@
                                 </div>
 
                                 <!-- Cambio de Tono (Pitch) -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                <div id="cardPitch" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] transition-colors">
                                     <label class="block text-sm font-bold mb-1 flex justify-between items-center">
                                         <span>Cambio de Tono (Pitch):</span>
                                         <span id="lblPitchValue" class="text-[#FF422E] font-bold font-mono">0 semitonos</span>
@@ -269,7 +269,7 @@
                                 </div>
 
                                 <!-- Audio Reverse (Efecto Reversa) -->
-                                <div class="bg-[#1f1f1f] p-2.5 rounded border border-[#444]">
+                                <div id="cardReverse" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] transition-colors">
                                     <label class="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" id="chkReverseAudio" class="w-4 h-4 accent-[#FF422E]">
                                         <div>
@@ -288,7 +288,7 @@
                                             <span class="text-xs text-gray-400 block">El audio rotará envolviendo tu cabeza (usar auriculares)</span>
                                         </div>
                                     </label>
-                                    <div id="controls8D" class="hidden space-y-3 pl-7 pt-1 border-t border-[#333]">
+                                    <div id="controls8D" class="space-y-3 pl-7 pt-1 border-t border-[#333]">
                                         <div>
                                             <label class="block text-xs font-bold text-gray-300 mb-1">Dirección Inicial:</label>
                                             <select id="sel8DDir" class="w-full bg-[#2B2B2B] text-xs text-white p-1.5 rounded border border-[#555] focus:outline-none focus:border-[#FF422E]">

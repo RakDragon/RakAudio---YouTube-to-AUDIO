@@ -90,6 +90,11 @@ const sel8DDir             = document.getElementById('sel8DDir');
 const slide8DSpeed         = document.getElementById('slide8DSpeed');
 const lbl8DSpeed           = document.getElementById('lbl8DSpeed');
 const card8D               = document.getElementById('card8D');
+const cardAdjustVol        = document.getElementById('cardAdjustVol');
+const cardTempo            = document.getElementById('cardTempo');
+const cardNormalize        = document.getElementById('cardNormalize');
+const cardPitch            = document.getElementById('cardPitch');
+const cardReverse          = document.getElementById('cardReverse');
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
 const lblPlayTrim = document.getElementById('lblPlayTrim');
@@ -345,6 +350,8 @@ function resetEditorControls() {
     volAdjustSlider.disabled = true;
     volAdjustSlider.classList.add('opacity-50', 'pointer-events-none');
     lblVolAdjust.classList.add('opacity-50');
+
+    checkIfStateChanged();
 }
 
 /** Enable / disable the "Aplicar" button based on whether settings have changed. */
@@ -375,6 +382,14 @@ function checkIfStateChanged() {
     btnApplyTrim.classList.toggle('cursor-not-allowed',  isSame);
     btnApplyTrim.classList.toggle('pointer-events-none', isSame);
     btnApplyTrim.classList.toggle('hover:bg-[#d43726]', !isSame);
+
+    // Update borders of effect containers based on whether they are active/modified
+    if (cardAdjustVol) cardAdjustVol.classList.replace(cur.adjustVol ? 'border-[#444]' : 'border-[#FF422E]', cur.adjustVol ? 'border-[#FF422E]' : 'border-[#444]');
+    if (cardTempo)     cardTempo.classList.replace(Math.abs(cur.tempo - 1.0) > 0.01 ? 'border-[#444]' : 'border-[#FF422E]', Math.abs(cur.tempo - 1.0) > 0.01 ? 'border-[#FF422E]' : 'border-[#444]');
+    if (cardNormalize) cardNormalize.classList.replace(cur.normalizeVol ? 'border-[#444]' : 'border-[#FF422E]', cur.normalizeVol ? 'border-[#FF422E]' : 'border-[#444]');
+    if (cardPitch)     cardPitch.classList.replace(cur.pitch !== 0 ? 'border-[#444]' : 'border-[#FF422E]', cur.pitch !== 0 ? 'border-[#FF422E]' : 'border-[#444]');
+    if (cardReverse)   cardReverse.classList.replace(cur.reverse ? 'border-[#444]' : 'border-[#FF422E]', cur.reverse ? 'border-[#FF422E]' : 'border-[#444]');
+    if (card8D)        card8D.classList.replace(cur.eight_d ? 'border-[#444]' : 'border-[#FF422E]', cur.eight_d ? 'border-[#FF422E]' : 'border-[#444]');
 }
 
 // ── Time display ──────────────────────────────────────────────────────────────
@@ -995,14 +1010,6 @@ document.getElementById('btnCloseTrim').addEventListener('click', () => {
             slide8DSpeed.value = lastAppliedState.eight_d_speed; 
             if (lbl8DSpeed) lbl8DSpeed.textContent = lastAppliedState.eight_d_speed + 's';
         }
-        if (controls8D) {
-            if (lastAppliedState.eight_d) controls8D.classList.remove('hidden');
-            else controls8D.classList.add('hidden');
-        }
-        if (card8D) {
-            if (lastAppliedState.eight_d) card8D.classList.replace('border-[#444]', 'border-[#FF422E]');
-            else card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
-        }
         
         if (tempoSlider) {
             tempoSlider.value = lastAppliedState.tempo;
@@ -1160,13 +1167,6 @@ if (chkReverseAudio) {
 
 if (chk8D) {
     chk8D.addEventListener('change', () => {
-        if (chk8D.checked) {
-            controls8D.classList.remove('hidden');
-            card8D.classList.replace('border-[#444]', 'border-[#FF422E]');
-        } else {
-            controls8D.classList.add('hidden');
-            card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
-        }
         checkIfStateChanged();
         if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
         if (wsTrim) applyLiveAudioMath(wsTrim, false);
