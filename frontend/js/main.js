@@ -95,6 +95,7 @@ const cardTempo            = document.getElementById('cardTempo');
 const cardNormalize        = document.getElementById('cardNormalize');
 const cardPitch            = document.getElementById('cardPitch');
 const cardReverse          = document.getElementById('cardReverse');
+const cardFade             = document.getElementById('cardFade');
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
 const lblPlayTrim = document.getElementById('lblPlayTrim');
@@ -389,6 +390,9 @@ function checkIfStateChanged() {
     if (cardPitch)     cardPitch.classList.replace(cur.pitch !== 0 ? 'border-[#444]' : 'border-[#FF422E]', cur.pitch !== 0 ? 'border-[#FF422E]' : 'border-[#444]');
     if (cardReverse)   cardReverse.classList.replace(cur.reverse ? 'border-[#444]' : 'border-[#FF422E]', cur.reverse ? 'border-[#FF422E]' : 'border-[#444]');
     if (card8D)        card8D.classList.replace(cur.eight_d ? 'border-[#444]' : 'border-[#FF422E]', cur.eight_d ? 'border-[#FF422E]' : 'border-[#444]');
+    
+    const fadeActive = (cur.fadeIn > 0.01 || cur.fadeOut > 0.01);
+    if (cardFade)      cardFade.classList.replace(fadeActive ? 'border-[#444]' : 'border-[#FF422E]', fadeActive ? 'border-[#FF422E]' : 'border-[#444]');
 }
 
 // ── Time display ──────────────────────────────────────────────────────────────

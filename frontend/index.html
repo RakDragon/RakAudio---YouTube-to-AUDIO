@@ -11,6 +11,12 @@
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="css/styles.css?v=3">
     <!-- .spectrum-reversed is defined in css/styles.css — no inline duplicate needed -->
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f1f1f; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #FF422E; }
+    </style>
 </head>
 
 <body class="bg-[#1a1a1a] text-white min-h-screen font-sans">
@@ -189,33 +195,32 @@
                             </div>
                         </div>
 
-                        <!-- Columna 2: Fade y Ajustes de Audio -->
-                        <div class="flex flex-col gap-3 h-full">
+                        <!-- Columna 2: Ajustes de Audio -->
+                        <div class="flex flex-col gap-3 h-full overflow-hidden">
                             
-                            <!-- 2. Sección Controles de Fade -->
-                            <div id="secFade" class="bg-[#222222] p-4 rounded-lg text-white">
-                                <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Controles de Fade</h4>
-                                <div class="grid grid-cols-1 gap-3">
-                                    <div>
-                                        <label class="block text-sm font-bold mb-1 flex justify-between items-center">
-                                            <span>Fade In (Segundos):</span> 
-                                            <span id="lblFadeInG" class="text-[#FF422E] font-bold font-mono">0s</span>
-                                        </label>
-                                        <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-bold mb-1 flex justify-between items-center">
-                                            <span>Fade Out (Segundos):</span> 
-                                            <span id="lblFadeOutG" class="text-[#FF422E] font-bold font-mono">0s</span>
-                                        </label>
-                                        <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                            <!-- Sección Ajustes de Audio (Scrollable) -->
+                            <div id="secAudio" class="bg-[#222222] p-4 rounded-lg text-white space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+                                <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Ajustes de Audio</h4>
+                                
+                                <!-- Controles de Fade -->
+                                <div id="cardFade" class="bg-[#1f1f1f] p-3 rounded border border-[#444] transition-colors">
+                                    <div class="grid grid-cols-1 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                                <span>Fade In (Segundos):</span> 
+                                                <span id="lblFadeInG" class="text-[#FF422E] font-bold font-mono">0s</span>
+                                            </label>
+                                            <input type="range" id="fadeInGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold mb-1 flex justify-between items-center">
+                                                <span>Fade Out (Segundos):</span> 
+                                                <span id="lblFadeOutG" class="text-[#FF422E] font-bold font-mono">0s</span>
+                                            </label>
+                                            <input type="range" id="fadeOutGlobal" min="0" max="10" step="0.1" value="0" class="w-full">
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            <!-- 3. Sección Ajustes de Audio -->
-                            <div id="secAudio" class="bg-[#222222] p-4 rounded-lg text-white space-y-2 flex-1">
-                                <h4 class="font-bold text-[#FF422E] mb-2 uppercase text-sm tracking-widest">Ajustes de Audio</h4>
                                 
                                 <!-- Ajustar volumen -->
                                 <div id="cardAdjustVol" class="bg-[#1f1f1f] p-2.5 rounded border border-[#444] flex flex-wrap items-center justify-between gap-4 transition-colors">
