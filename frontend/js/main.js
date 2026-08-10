@@ -910,6 +910,7 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
 // ── Trim modal ────────────────────────────────────────────────────────────────
 document.getElementById('btnOpenTrim').addEventListener('click', () => {
     trimModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
     setActiveMode('playhead');
 
     if (btnPlayTrim) btnPlayTrim.style.setProperty('--trim-progress', '0%');
@@ -1007,6 +1008,7 @@ document.getElementById('btnCloseTrim').addEventListener('click', () => {
     if (btnPlayTrim) btnPlayTrim.style.setProperty('--trim-progress', '0%');
     if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
     trimModal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
     
     // Revert UI to lastAppliedState since "Aplicar" was not pressed
     if (lastAppliedState) {
@@ -1062,6 +1064,7 @@ btnApplyTrim.addEventListener('click', () => {
     if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
 
     trimModal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
     viewToggle.classList.remove('hidden');
     setGlobalView(true);
     checkIfStateChanged();
