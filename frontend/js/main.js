@@ -96,6 +96,13 @@ const cardNormalize        = document.getElementById('cardNormalize');
 const cardPitch            = document.getElementById('cardPitch');
 const cardReverse          = document.getElementById('cardReverse');
 const cardFade             = document.getElementById('cardFade');
+const radarContainer       = document.getElementById('radarContainer');
+const radarCanvas          = document.getElementById('radarCanvas');
+
+let isRadarDragging = false;
+let radarManualAngle = 0;
+let radarAngleOffset = 0;
+
 // Trim modal controls (M6: cached — were looked up on every play/pause event)
 const btnPlayTrim = document.getElementById('btnPlayTrim');
 const lblPlayTrim = document.getElementById('lblPlayTrim');
@@ -518,7 +525,13 @@ function apply8D(ws, isGlobalEdited) {
                     const t = ws.getCurrentTime();
                     
                     const mult = dir === 'left' ? -1 : 1;
-                    const angle = (t / speed) * 2 * Math.PI * mult;
+                    let angle;
+                    
+                    if (isRadarDragging) {
+                        angle = radarManualAngle;
+                    } else {
+                        angle = (t / speed) * 2 * Math.PI * mult + radarAngleOffset;
+                    }
                     
                     // Exaggerated spatial radius
                     const radius = 2;
@@ -527,6 +540,28 @@ function apply8D(ws, isGlobalEdited) {
                     
                     ws._8d.panner.positionX.setTargetAtTime(x, ws._8d.ctx.currentTime, 0.05);
                     ws._8d.panner.positionZ.setTargetAtTime(z, ws._8d.ctx.currentTime, 0.05);
+                    
+                    if (radarCanvas) {
+                        const ctx = radarCanvas.getContext('2d');
+                        ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
+                        const cx = radarCanvas.width / 2;
+                        const cy = radarCanvas.height / 2;
+                        const r = radarCanvas.width / 2 - 8;
+                        const visX = cx + Math.sin(angle) * r;
+                        const visY = cy - Math.cos(angle) * r;
+                        
+                        ctx.beginPath();
+                        ctx.arc(visX, visY, 6, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#FF422E';
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = '#FF422E';
+                        ctx.fill();
+                        ctx.fill(); // double fill for strong shadow
+                        ctx.shadowBlur = 0;
+                    }
+                } else if (!ws._8d.isActive && radarCanvas) {
+                    const ctx = radarCanvas.getContext('2d');
+                    ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
                 }
                 ws._8d.raf = requestAnimationFrame(updatePan);
             };
@@ -1194,6 +1229,44 @@ if (slide8DSpeed) {
         checkIfStateChanged();
         if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
         if (wsTrim) applyLiveAudioMath(wsTrim, false);
+    });
+}
+
+if (radarCanvas) {
+    const handleRadarMove = (e) => {
+        if (!isRadarDragging) return;
+        const rect = radarCanvas.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const x = e.clientX - rect.left - cx;
+        const y = e.clientY - rect.top - cy;
+        radarManualAngle = Math.atan2(x, -y);
+    };
+
+    radarCanvas.addEventListener('pointerdown', (e) => {
+        isRadarDragging = true;
+        radarCanvas.setPointerCapture(e.pointerId);
+        handleRadarMove(e);
+    });
+
+    radarCanvas.addEventListener('pointermove', handleRadarMove);
+
+    radarCanvas.addEventListener('pointerup', (e) => {
+        isRadarDragging = false;
+        radarCanvas.releasePointerCapture(e.pointerId);
+        
+        let ws;
+        if (wsGlobal && wsGlobal._8d && wsGlobal._8d.isActive) ws = wsGlobal;
+        else if (wsTrim && wsTrim._8d && wsTrim._8d.isActive) ws = wsTrim;
+        
+        if (ws) {
+            const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
+            const dir = sel8DDir ? sel8DDir.value : 'left';
+            const t = ws.getCurrentTime();
+            const mult = dir === 'left' ? -1 : 1;
+            const autoBaseAngle = (t / speed) * 2 * Math.PI * mult;
+            radarAngleOffset = radarManualAngle - autoBaseAngle;
+        }
     });
 }
 

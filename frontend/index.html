@@ -312,6 +312,16 @@
                                                 <span>Lento (20s)</span>
                                             </div>
                                         </div>
+                                        <div class="flex flex-col items-center justify-center pt-2">
+                                            <div class="relative w-24 h-24 rounded-full border-2 border-[#333] flex items-center justify-center cursor-pointer group" id="radarContainer">
+                                                <canvas id="radarCanvas" width="96" height="96" class="absolute inset-0 z-10 touch-none"></canvas>
+                                                <!-- Centro de radar (cabeza) -->
+                                                <div class="w-2 h-2 bg-white rounded-full z-20 pointer-events-none shadow-[0_0_5px_rgba(255,255,255,0.8)]"></div>
+                                                <!-- Anillo interno decorativo -->
+                                                <div class="absolute w-12 h-12 rounded-full border border-[#444] opacity-50 pointer-events-none"></div>
+                                            </div>
+                                            <span class="text-[9px] text-gray-500 mt-2">Arrastra el radar para ajustar</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
