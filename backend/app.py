@@ -226,6 +226,7 @@ def process_audio():
     eight_d_dir   = data.get("eight_d_dir", "left")
     eight_d_speed = float(data.get("eight_d_speed", 8))
     eight_d_radius = float(data.get("eight_d_radius", 2.0))
+    eight_d_pattern = data.get("eight_d_pattern", "circle")
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -276,9 +277,18 @@ def process_audio():
             # 2. Paneo 360 (Rotación Izquierda/Derecha)
             stream = ffmpeg.filter(stream, "apulsator", mode="sine", hz=str(hz), offset_l=offset_l, offset_r=offset_r)
             
-            # 3. Tremolo para simular la variación de volumen por distancia (se intensifica con el radio)
+            # 3. Tremolo para simular la variación de volumen por distancia
             tremolo_depth = min(0.9, eight_d_radius * 0.15)
-            stream = ffmpeg.filter(stream, "tremolo", f=str(hz), d=str(tremolo_depth))
+            tremolo_f = hz
+            
+            if eight_d_pattern == 'ellipse':
+                # En elipse la distancia frontal/trasera es menor, reducimos el tremolo a la mitad
+                tremolo_depth *= 0.5
+            elif eight_d_pattern == 'figure8':
+                # En figura de 8 pasa por el centro el doble de rápido
+                tremolo_f = hz * 2.0
+                
+            stream = ffmpeg.filter(stream, "tremolo", f=str(tremolo_f), d=str(tremolo_depth))
             
             # 4. Reverb para añadir profundidad acústica
             stream = ffmpeg.filter(stream, "aecho", "0.8", "0.88", "40", "0.4")
