@@ -1547,30 +1547,20 @@ btnProcess.addEventListener('click', async () => {
     }, delay);
 
     try {
+        spanText.textContent = 'Renderizando audio (Alta Fidelidad)...';
+        const wavBlob = await renderOfflineAudio();
+        spanText.textContent = 'Convirtiendo formato en el servidor...';
+        
+        const formData = new FormData();
+        formData.append('audioFile', wavBlob, 'rendered.wav');
+        formData.append('client_id', clientId);
+        formData.append('id', currentVideoId);
+        formData.append('format', format);
+        formData.append('quality', quality);
+
         const res = await fetch(`${API_BASE}/api/process`, {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id:    clientId,
-                id:           currentVideoId,
-                ext:          currentExt,
-                start:        trimStartTime,
-                end:          trimEndTime,
-                fadeIn:       parseFloat(fInG.value),
-                fadeOut:      parseFloat(fOutG.value),
-                format,
-                quality,
-                adjustVol:    chkAdjustVol.checked,
-                volLevel:     parseFloat(volAdjustSlider.value),
-                normalizeVol: chkNormalizeVolModal?.checked ?? false,
-                tempo:        parseFloat(tempoSlider?.value ?? 1.0),
-                pitch:        parseInt(pitchSlider?.value ?? 0, 10), // E2: radix
-                reverse:      chkReverseAudio?.checked ?? false,
-                auditorium:   chkAuditorium?.checked ?? false,
-                eight_d:       chk8D?.checked ?? false,
-                eight_d_dir:   sel8DDir?.value ?? 'left',
-                eight_d_speed: slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8,
-            }),
+            body: formData,
         });
 
         if (!res.ok) throw new Error('Error en el servidor al generar audio.');
@@ -1704,3 +1694,167 @@ const btnClearHistory = document.getElementById('btnClearHistory');
 if (btnClearHistory) btnClearHistory.addEventListener('click', clearHistory);
 
 renderHistory();
+
+// ─── Offline Audio Rendering (100% Fidelity Export) ──────────────────────────
+
+async function renderOfflineAudio() {
+    let urlToRender = audioUrlGlobal;
+    if (chkAuditorium?.checked && auditoriumAudioUrl) urlToRender = auditoriumAudioUrl;
+    else if (chkReverseAudio?.checked && reversedAudioUrl) urlToRender = reversedAudioUrl;
+
+    const arrayBuf = await (await fetch(urlToRender)).arrayBuffer();
+    const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const srcBuf = await tempCtx.decodeAudioData(arrayBuf);
+
+    const start = trimStartTime;
+    const end = trimEndTime;
+    const durationSecs = end - start;
+    if (durationSecs <= 0) throw new Error("Duración inválida");
+
+    const tempoVal = parseFloat(tempoSlider ? tempoSlider.value : 1.0);
+    const pitchVal = parseInt(pitchSlider ? pitchSlider.value : 0, 10);
+    const pitchFactor = Math.pow(2, pitchVal / 12);
+    const rate = Math.max(0.25, Math.min(4.0, tempoVal * pitchFactor));
+
+    const finalDuration = durationSecs / rate;
+    const sampleRate = srcBuf.sampleRate;
+    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
+        2, Math.ceil(finalDuration * sampleRate), sampleRate
+    );
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = srcBuf;
+    source.playbackRate.value = rate;
+
+    // Volume & Normalization
+    const volNode = offlineCtx.createGain();
+    let maxVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : 1.0;
+    if (chkNormalizeVolModal?.checked) maxVol *= 1.45;
+    volNode.gain.value = Math.max(0, Math.min(2.0, maxVol));
+
+    // Fades
+    const inSec = parseFloat(fInG.value);
+    const outSec = parseFloat(fOutG.value);
+    const fadeNode = offlineCtx.createGain();
+    fadeNode.gain.setValueAtTime(0, 0);
+    if (inSec > 0) {
+        fadeNode.gain.linearRampToValueAtTime(1, inSec);
+    } else {
+        fadeNode.gain.setValueAtTime(1, 0);
+    }
+    if (outSec > 0) {
+        fadeNode.gain.setValueAtTime(1, Math.max(0, finalDuration - outSec));
+        fadeNode.gain.linearRampToValueAtTime(0, finalDuration);
+    }
+
+    // 8D Effect
+    const shouldApply8D = chk8D && chk8D.checked;
+    let lastNode = fadeNode;
+    
+    if (shouldApply8D) {
+        const panner = offlineCtx.createPanner();
+        panner.panningModel = 'HRTF';
+        panner.distanceModel = 'inverse';
+        panner.refDistance = 1;
+        panner.maxDistance = 10000;
+        panner.rolloffFactor = 1;
+
+        const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
+        const dir = sel8DDir ? sel8DDir.value : 'left';
+        const pattern = sel8DPattern ? sel8DPattern.value : 'circle';
+        const radius = slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0;
+        const mult = dir === 'left' ? -1 : 1;
+
+        const fps = 30;
+        const frames = Math.ceil(finalDuration * fps) || 1;
+        const curveX = new Float32Array(frames);
+        const curveZ = new Float32Array(frames);
+        
+        for (let i = 0; i < frames; i++) {
+            const t = (i / fps) * rate; // adjust time mathematically for speed
+            const angle = (t / speed) * 2 * Math.PI * mult;
+            if (pattern === 'ellipse') {
+                curveX[i] = Math.sin(angle) * (radius * 1.5);
+                curveZ[i] = Math.cos(angle) * (radius * 0.5);
+            } else if (pattern === 'figure8') {
+                curveX[i] = Math.sin(angle) * radius;
+                curveZ[i] = Math.sin(angle * 2) * (radius * 0.8);
+            } else {
+                curveX[i] = Math.sin(angle) * radius;
+                curveZ[i] = Math.cos(angle) * radius;
+            }
+        }
+        
+        panner.positionX.setValueCurveAtTime(curveX, 0, finalDuration);
+        panner.positionZ.setValueCurveAtTime(curveZ, 0, finalDuration);
+        panner.positionY.setValueAtTime(0, 0);
+        
+        lastNode.connect(panner);
+        lastNode = panner;
+    }
+
+    source.connect(volNode);
+    volNode.connect(fadeNode);
+    lastNode.connect(offlineCtx.destination);
+
+    source.start(0, start, durationSecs);
+    const renderedBuffer = await offlineCtx.startRendering();
+    return audioBufferToWav(renderedBuffer);
+}
+
+function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    let result;
+    if (numChannels === 2) {
+        const channel1 = buffer.getChannelData(0);
+        const channel2 = buffer.getChannelData(1);
+        const length = channel1.length + channel2.length;
+        result = new Float32Array(length);
+        let index = 0;
+        let inputIndex = 0;
+        while (index < length) {
+            result[index++] = channel1[inputIndex];
+            result[index++] = channel2[inputIndex];
+            inputIndex++;
+        }
+    } else {
+        result = buffer.getChannelData(0);
+    }
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const wavBuffer = new ArrayBuffer(44 + result.length * bytesPerSample);
+    const view = new DataView(wavBuffer);
+    
+    const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+    
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + result.length * bytesPerSample, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, result.length * bytesPerSample, true);
+    
+    let offset = 44;
+    for (let i = 0; i < result.length; i++, offset += 2) {
+        let s = Math.max(-1, Math.min(1, result[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    
+    return new Blob([view], { type: 'audio/wav' });
+}

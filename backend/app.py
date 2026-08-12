@@ -9,6 +9,7 @@ import uuid
 from collections import deque
 
 import ffmpeg
+
 import yt_dlp
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
@@ -177,131 +178,36 @@ def extract():
         update_progress(client_id, {"status": "error", "progress": 0, "msg": str(e)})
         return jsonify({"error": str(e)}), 500
 
-# ─── Serve downloaded audio ────────────────────────────────────────────────────
-@app.route("/api/audio/<path:filename>")
-def get_audio(filename):
-    # S1: Path-traversal protection — resolved path must stay inside DOWNLOAD_DIR.
-    # Using realpath on both sides handles symlinks and '..' components uniformly.
-    resolved = os.path.realpath(os.path.join(DOWNLOAD_DIR, filename))
-    safe_root = DOWNLOAD_DIR + os.sep
-    if not (resolved.startswith(safe_root) or resolved == DOWNLOAD_DIR):
-        return jsonify({"error": "Ruta inválida"}), 400
-    if os.path.isfile(resolved):
-        return send_file(resolved)
-    return jsonify({"error": "Archivo no encontrado"}), 404
-
-# ─── Process audio ─────────────────────────────────────────────────────────────
 @app.route("/api/process", methods=["POST"])
 def process_audio():
-    data = request.get_json(force=True, silent=True) or {}
+    client_id  = request.form.get("client_id", "default")
+    video_id   = request.form.get("id", "")
+    out_format = request.form.get("format", "mp3")
+    quality    = request.form.get("quality", "320k")
 
-    client_id  = data.get("client_id", "default")
-    video_id   = data.get("id", "")
-    ext        = data.get("ext", "")
-    out_format = data.get("format", "mp3")
-
-    # S2: Validate video_id and ext before building any filesystem path
     if not re.fullmatch(r"[a-zA-Z0-9_\-]+", video_id or ""):
         return jsonify({"error": "ID de video inválido"}), 400
-    if (ext or "") not in ALLOWED_EXTS:
-        return jsonify({"error": "Extensión de audio no permitida"}), 400
 
-    start = float(data.get("start", 0))
-    end   = float(data.get("end",   0))
+    if 'audioFile' not in request.files:
+        return jsonify({"error": "No se recibió el archivo de audio renderizado"}), 400
+        
+    file = request.files['audioFile']
+    if file.filename == '':
+        return jsonify({"error": "Archivo vacío"}), 400
 
-    # S6: Reject nonsensical time ranges early — avoids cryptic FFmpeg errors
-    if end <= start:
-        return jsonify({"error": "El tiempo de fin debe ser mayor al de inicio"}), 400
-
-    fade_in       = float(data.get("fadeIn",    0))
-    fade_out      = float(data.get("fadeOut",   0))
-    quality       = data.get("quality", "320k")
-    adjust_vol    = bool(data.get("adjustVol",    False))
-    vol_level     = float(data.get("volLevel",   1.0))
-    normalize_vol = bool(data.get("normalizeVol", False))
-    tempo         = max(0.5, min(2.0, float(data.get("tempo", 1.0))))
-    pitch         = max(-12,  min(12,  int(data.get("pitch",  0))))
-    reverse       = bool(data.get("reverse", False))
-    eight_d       = bool(data.get("eight_d", False))
-    eight_d_dir   = data.get("eight_d_dir", "left")
-    eight_d_speed = float(data.get("eight_d_speed", 8))
-    eight_d_radius = float(data.get("eight_d_radius", 2.0))
-    eight_d_pattern = data.get("eight_d_pattern", "circle")
-
-    input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
-    if not os.path.exists(input_path):
-        return jsonify({"error": "Audio original no encontrado"}), 404
+    input_path = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_rendered.wav")
+    file.save(input_path)
 
     output_path = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}.{out_format}")
 
     update_progress(client_id, {
         "status": "processing", "progress": 0,
-        "msg": "Enviando solicitud al servidor. Procesando recortes y efectos..."
+        "msg": "Procesando conversión de formato..."
     })
 
     try:
-        stream           = ffmpeg.input(input_path, ss=start, to=end)
-        duration_trimmed = end - start
-
-        if adjust_vol and vol_level != 1.0:
-            stream = ffmpeg.filter(stream, "volume", str(vol_level))
-
-        if normalize_vol:
-            stream = ffmpeg.filter(stream, "loudnorm")
-
-        if pitch != 0:
-            pitch_factor = 2.0 ** (pitch / 12.0)
-            stream       = ffmpeg.filter(stream, "asetrate", str(int(44100 * pitch_factor)))
-            stream       = ffmpeg.filter(stream, "aresample", "44100")
-            tempo        = tempo / pitch_factor
-
-        if abs(tempo - 1.0) > 0.001:
-            eff = tempo
-            while eff > 2.0: stream = ffmpeg.filter(stream, "atempo", "2.0"); eff /= 2.0
-            while eff < 0.5: stream = ffmpeg.filter(stream, "atempo", "0.5"); eff *= 2.0
-            if abs(eff - 1.0) > 0.001:
-                stream = ffmpeg.filter(stream, "atempo", f"{eff:.4f}")
-            duration_trimmed /= (float(data.get("tempo", 1.0)) or 1.0)
-
-        if reverse:
-            stream = ffmpeg.filter(stream, "areverse")
-            
-        if eight_d:
-            hz = 1.0 / max(4.0, min(20.0, eight_d_speed))
-            offset_l, offset_r = ("0", "0.5") if eight_d_dir == "left" else ("0.5", "0")
-            
-            # 1. Ensanchar el estéreo (la amplitud espacial depende del radio)
-            stereo_m = max(0.5, min(6.0, (eight_d_radius / 2.0) * 2.5))
-            stream = ffmpeg.filter(stream, "extrastereo", m=stereo_m)
-            
-            # 2. Paneo 360 (Rotación Izquierda/Derecha)
-            stream = ffmpeg.filter(stream, "apulsator", mode="sine", hz=str(hz), offset_l=offset_l, offset_r=offset_r)
-            
-            # 3. Tremolo para simular la variación de volumen por distancia
-            tremolo_depth = min(0.9, eight_d_radius * 0.15)
-            tremolo_f = hz
-            
-            if eight_d_pattern == 'ellipse':
-                # En elipse la distancia frontal/trasera es menor, reducimos el tremolo a la mitad
-                tremolo_depth *= 0.5
-            elif eight_d_pattern == 'figure8':
-                # En figura de 8 pasa por el centro el doble de rápido
-                tremolo_f = hz * 2.0
-                
-            stream = ffmpeg.filter(stream, "tremolo", f=str(tremolo_f), d=str(tremolo_depth))
-            
-            # 4. Reverb para añadir profundidad acústica
-            stream = ffmpeg.filter(stream, "aecho", "0.8", "0.88", "40", "0.4")
-
-        if fade_in > 0:
-            stream = ffmpeg.filter(stream, "afade", type="in",  start_time=0, duration=fade_in)
-        if fade_out > 0:
-            stream = ffmpeg.filter(stream, "afade", type="out",
-                                   start_time=max(0.0, duration_trimmed - fade_out), duration=fade_out)
-
-        # 5. Master Limiter final para evitar CUALQUIER distorsión (clipping) al mezclar múltiples efectos
-        stream = ffmpeg.filter(stream, "alimiter", level_in=1.0, level_out=1.0, limit=-0.5)
-
+        stream = ffmpeg.input(input_path)
+        
         codec_kwargs: dict = {}
         if out_format in ("mp3", "m4a"):
             codec_kwargs["audio_bitrate"] = quality
@@ -310,42 +216,29 @@ def process_audio():
         elif out_format == "wav":
             codec_kwargs["acodec"] = "pcm_s16le"
 
-        process = ffmpeg.run_async(
-            ffmpeg.output(stream, output_path, **codec_kwargs),
-            pipe_stderr=True, overwrite_output=True, quiet=True,
-        )
+        # Overwrite output
+        stream = ffmpeg.output(stream, output_path, **codec_kwargs, y=None)
+        
+        update_progress(client_id, {"status": "processing", "progress": 50, "msg": "Generando archivo final y aplicando metadatos..."})
+        ffmpeg.run(stream, capture_stdout=True, capture_stderr=True)
 
-        time_regex   = re.compile(r"time=(?P<time>\d+:\d+:\d+\.\d+)")
-        # A5: deque(maxlen=N) gives O(1) append+truncate; list.pop(0) is O(n)
-        stderr_lines = deque(maxlen=20)
+        final_path = add_thumbnail_and_metadata(output_path, output_path, video_id, quality)
 
-        for line in process.stderr:
-            line_str = line.decode("utf-8", errors="ignore")
-            stderr_lines.append(line_str)
-            m = time_regex.search(line_str)
-            if m:
-                h, mn, s    = m.group("time").split(":")
-                current_sec = int(h) * 3600 + int(mn) * 60 + float(s)
-                if duration_trimmed > 0:
-                    perc = min(99, (current_sec / duration_trimmed) * 100)
-                    update_progress(client_id, {
-                        "status": "processing", "progress": perc,
-                        "msg": f"Procesando audio: {perc:.1f}%"
-                    })
+        # Cleanup
+        if os.path.exists(input_path):
+            try: os.remove(input_path)
+            except: pass
+            
+        update_progress(client_id, {"status": "done", "progress": 100, "msg": "¡Audio exportado con éxito!"})
+        return send_file(final_path, as_attachment=True, download_name=f"audio_editado.{out_format}")
 
-        process.wait()
-
-        if process.returncode != 0:
-            err_details = "".join(stderr_lines).strip() or "FFmpeg devolvió un error interno."
-            raise RuntimeError(f"Error en FFmpeg: {err_details}")
-
-        update_progress(client_id, {
-            "status": "done", "progress": 100, "msg": "Recibiendo archivo generado..."
-        })
-
-        return send_file(output_path, as_attachment=True, download_name=f"procesado.{out_format}")
-
-    except (RuntimeError, ValueError, OSError) as e:
+    except ffmpeg.Error as e:
+        traceback.print_exc()
+        if e.stderr:
+            print("FFMPEG STDERR:", e.stderr.decode("utf-8"))
+        update_progress(client_id, {"status": "error", "progress": 0, "msg": "Error en procesamiento de FFmpeg."})
+        return jsonify({"error": "Error interno de FFmpeg"}), 500
+    except Exception as e:
         traceback.print_exc()
         update_progress(client_id, {"status": "error", "progress": 0, "msg": str(e)})
         return jsonify({"error": str(e)}), 500
