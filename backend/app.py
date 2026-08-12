@@ -178,6 +178,18 @@ def extract():
         update_progress(client_id, {"status": "error", "progress": 0, "msg": str(e)})
         return jsonify({"error": str(e)}), 500
 
+# ─── Serve downloaded audio ────────────────────────────────────────────────────
+@app.route("/api/audio/<path:filename>")
+def get_audio(filename):
+    # Path-traversal protection
+    resolved = os.path.realpath(os.path.join(DOWNLOAD_DIR, filename))
+    safe_root = DOWNLOAD_DIR + os.sep
+    if not (resolved.startswith(safe_root) or resolved == DOWNLOAD_DIR):
+        return jsonify({"error": "Ruta inválida"}), 400
+    if os.path.isfile(resolved):
+        return send_file(resolved)
+    return jsonify({"error": "Archivo no encontrado"}), 404
+
 @app.route("/api/process", methods=["POST"])
 def process_audio():
     client_id  = request.form.get("client_id", "default")
@@ -222,15 +234,13 @@ def process_audio():
         update_progress(client_id, {"status": "processing", "progress": 50, "msg": "Generando archivo final y aplicando metadatos..."})
         ffmpeg.run(stream, capture_stdout=True, capture_stderr=True)
 
-        final_path = add_thumbnail_and_metadata(output_path, output_path, video_id, quality)
-
         # Cleanup
         if os.path.exists(input_path):
             try: os.remove(input_path)
             except: pass
             
         update_progress(client_id, {"status": "done", "progress": 100, "msg": "¡Audio exportado con éxito!"})
-        return send_file(final_path, as_attachment=True, download_name=f"audio_editado.{out_format}")
+        return send_file(output_path, as_attachment=True, download_name=f"audio_editado.{out_format}")
 
     except ffmpeg.Error as e:
         traceback.print_exc()
