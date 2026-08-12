@@ -312,6 +312,17 @@
                                                 <span>Lento (20s)</span>
                                             </div>
                                         </div>
+                                        <div>
+                                            <label class="block text-xs font-bold mb-1 flex justify-between items-center text-gray-300">
+                                                <span>Radio de Distancia:</span>
+                                                <span id="lbl8DRadius" class="text-[#FF422E] font-bold font-mono">2.0m</span>
+                                            </label>
+                                            <input type="range" id="slide8DRadius" min="0.5" max="5.0" step="0.1" value="2.0" class="w-full">
+                                            <div class="flex justify-between text-[9px] text-gray-500 font-mono mt-1">
+                                                <span>Cerca (0.5m)</span>
+                                                <span>Lejos (5.0m)</span>
+                                            </div>
+                                        </div>
                                         <div class="flex flex-col items-center justify-center pt-2">
                                             <div class="relative w-24 h-24 rounded-full border-2 border-[#333] flex items-center justify-center cursor-pointer group" id="radarContainer">
                                                 <canvas id="radarCanvas" width="96" height="96" class="absolute inset-0 z-10 touch-none"></canvas>

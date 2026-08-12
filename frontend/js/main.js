@@ -89,6 +89,8 @@ const controls8D           = document.getElementById('controls8D');
 const sel8DDir             = document.getElementById('sel8DDir');
 const slide8DSpeed         = document.getElementById('slide8DSpeed');
 const lbl8DSpeed           = document.getElementById('lbl8DSpeed');
+const slide8DRadius        = document.getElementById('slide8DRadius');
+const lbl8DRadius          = document.getElementById('lbl8DRadius');
 const card8D               = document.getElementById('card8D');
 const cardAdjustVol        = document.getElementById('cardAdjustVol');
 const cardTempo            = document.getElementById('cardTempo');
@@ -329,6 +331,7 @@ function readEditorState() {
         eight_d:       chk8D?.checked ?? false,
         eight_d_dir:   sel8DDir?.value ?? 'left',
         eight_d_speed: slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8,
+        eight_d_radius: slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0,
     };
 }
 
@@ -347,6 +350,7 @@ function resetEditorControls() {
     if (card8D) card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
     if (sel8DDir) sel8DDir.value = 'left';
     if (slide8DSpeed) { slide8DSpeed.value = 8; if (lbl8DSpeed) lbl8DSpeed.textContent = '8s'; }
+    if (slide8DRadius) { slide8DRadius.value = 2.0; if (lbl8DRadius) lbl8DRadius.textContent = '2.0m'; }
 
     fInG.value  = 0; lblFadeInG.textContent  = '0s';
     fOutG.value = 0; lblFadeOutG.textContent = '0s';
@@ -533,8 +537,8 @@ function apply8D(ws, isGlobalEdited) {
                         angle = (t / speed) * 2 * Math.PI * mult + radarAngleOffset;
                     }
                     
-                    // Exaggerated spatial radius
-                    const radius = 2;
+                    // Adjust spatial radius
+                    const radius = slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0;
                     const x = Math.sin(angle) * radius;
                     const z = Math.cos(angle) * radius;
                     
@@ -546,9 +550,11 @@ function apply8D(ws, isGlobalEdited) {
                         ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
                         const cx = radarCanvas.width / 2;
                         const cy = radarCanvas.height / 2;
-                        const r = radarCanvas.width / 2 - 8;
-                        const visX = cx + Math.sin(angle) * r;
-                        const visY = cy - Math.cos(angle) * r;
+                        
+                        // Map physical radius [0.5 - 5.0] to visual canvas radius [15 - 40]
+                        const rVis = 15 + ((radius - 0.5) / 4.5) * 25;
+                        const visX = cx + Math.sin(angle) * rVis;
+                        const visY = cy - Math.cos(angle) * rVis;
                         
                         ctx.beginPath();
                         ctx.arc(visX, visY, 6, 0, 2 * Math.PI);
@@ -1230,6 +1236,15 @@ if (slide8DSpeed) {
         if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
         if (wsTrim) applyLiveAudioMath(wsTrim, false);
     });
+    
+    if (slide8DRadius) {
+        slide8DRadius.addEventListener('input', () => {
+            lbl8DRadius.textContent = parseFloat(slide8DRadius.value).toFixed(1) + 'm';
+            checkIfStateChanged();
+            if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
+            if (wsTrim) applyLiveAudioMath(wsTrim, false);
+        });
+    }
 }
 
 if (radarCanvas) {

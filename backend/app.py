@@ -225,6 +225,7 @@ def process_audio():
     eight_d       = bool(data.get("eight_d", False))
     eight_d_dir   = data.get("eight_d_dir", "left")
     eight_d_speed = float(data.get("eight_d_speed", 8))
+    eight_d_radius = float(data.get("eight_d_radius", 2.0))
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -267,11 +268,19 @@ def process_audio():
         if eight_d:
             hz = 1.0 / max(4.0, min(20.0, eight_d_speed))
             offset_l, offset_r = ("0", "0.5") if eight_d_dir == "left" else ("0.5", "0")
-            # 1. Ensanchar el estéreo para mayor inmersión
-            stream = ffmpeg.filter(stream, "extrastereo", m=2.5)
-            # 2. Paneo (Rotación Izquierda/Derecha)
+            
+            # 1. Ensanchar el estéreo (la amplitud espacial depende del radio)
+            stereo_m = max(0.5, min(6.0, (eight_d_radius / 2.0) * 2.5))
+            stream = ffmpeg.filter(stream, "extrastereo", m=stereo_m)
+            
+            # 2. Paneo 360 (Rotación Izquierda/Derecha)
             stream = ffmpeg.filter(stream, "apulsator", mode="sine", hz=str(hz), offset_l=offset_l, offset_r=offset_r)
-            # 3. Reverb para añadir profundidad espacial trasera (Haas effect / small room)
+            
+            # 3. Tremolo para simular la variación de volumen por distancia (se intensifica con el radio)
+            tremolo_depth = min(0.9, eight_d_radius * 0.15)
+            stream = ffmpeg.filter(stream, "tremolo", f=str(hz), d=str(tremolo_depth))
+            
+            # 4. Reverb para añadir profundidad acústica
             stream = ffmpeg.filter(stream, "aecho", "0.8", "0.88", "40", "0.4")
 
         if fade_in > 0:
