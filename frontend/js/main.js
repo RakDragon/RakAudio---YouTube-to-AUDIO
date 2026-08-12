@@ -88,7 +88,6 @@ const chk8D                = document.getElementById('chk8D');
 const controls8D           = document.getElementById('controls8D');
 const sel8DDir             = document.getElementById('sel8DDir');
 const sel8DPattern         = document.getElementById('sel8DPattern');
-const chkDoppler           = document.getElementById('chkDoppler');
 const slide8DSpeed         = document.getElementById('slide8DSpeed');
 const lbl8DSpeed           = document.getElementById('lbl8DSpeed');
 const slide8DRadius        = document.getElementById('slide8DRadius');
@@ -333,7 +332,6 @@ function readEditorState() {
         eight_d:       chk8D?.checked ?? false,
         eight_d_dir:   sel8DDir?.value ?? 'left',
         eight_d_pattern: sel8DPattern?.value ?? 'circle',
-        eight_d_doppler: chkDoppler?.checked ?? true,
         eight_d_speed: slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8,
         eight_d_radius: slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0,
     };
@@ -354,7 +352,6 @@ function resetEditorControls() {
     if (card8D) card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
     if (sel8DDir) sel8DDir.value = 'left';
     if (sel8DPattern) sel8DPattern.value = 'circle';
-    if (chkDoppler) chkDoppler.checked = true;
     if (slide8DSpeed) { slide8DSpeed.value = 8; if (lbl8DSpeed) lbl8DSpeed.textContent = '8s'; }
     if (slide8DRadius) { slide8DRadius.value = 2.0; if (lbl8DRadius) lbl8DRadius.textContent = '2.0m'; }
 
@@ -521,16 +518,11 @@ function apply8D(ws, isGlobalEdited) {
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
             
-            // Add DelayNode for Doppler effect
-            const dopplerDelay = ctx.createDelay(1.0);
-            dopplerDelay.delayTime.value = 0;
-            
-            // Connect source -> dopplerDelay -> panner -> destination
-            source.connect(dopplerDelay);
-            dopplerDelay.connect(panner);
+            // Connect source -> panner
+            source.connect(panner);
             panner.connect(ctx.destination);
 
-            ws._8d = { ctx, panner, source, dopplerDelay, raf: null, isActive: false };
+            ws._8d = { ctx, panner, source, raf: null, isActive: false };
             
             // Animation loop for smooth 360 rotation
             const updatePan = () => {
@@ -566,12 +558,6 @@ function apply8D(ws, isGlobalEdited) {
                     
                     ws._8d.panner.positionX.setTargetAtTime(x, ws._8d.ctx.currentTime, 0.05);
                     ws._8d.panner.positionZ.setTargetAtTime(z, ws._8d.ctx.currentTime, 0.05);
-                    
-                    // Doppler Effect Physics via Delay
-                    const distance = Math.sqrt(x*x + z*z);
-                    const applyDoppler = chkDoppler ? chkDoppler.checked : true;
-                    const targetDelay = applyDoppler ? 0.01 + (distance / 150) : 0;
-                    ws._8d.dopplerDelay.delayTime.setTargetAtTime(targetDelay, ws._8d.ctx.currentTime, 0.05);
                     
                     if (radarCanvas) {
                         const ctx = radarCanvas.getContext('2d');
@@ -624,7 +610,7 @@ function apply8D(ws, isGlobalEdited) {
             ws._8d.isCurrentlyApplied = shouldApply;
             if (shouldApply) {
                 try { ws._8d.source.disconnect(); } catch(e){}
-                ws._8d.source.connect(ws._8d.dopplerDelay);
+                ws._8d.source.connect(ws._8d.panner);
                 if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
             } else {
                 // Bypass
@@ -1269,13 +1255,6 @@ if (sel8DDir) {
 }
 if (sel8DPattern) {
     sel8DPattern.addEventListener('change', () => {
-        checkIfStateChanged();
-        if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
-        if (wsTrim) applyLiveAudioMath(wsTrim, false);
-    });
-}
-if (chkDoppler) {
-    chkDoppler.addEventListener('change', () => {
         checkIfStateChanged();
         if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
         if (wsTrim) applyLiveAudioMath(wsTrim, false);

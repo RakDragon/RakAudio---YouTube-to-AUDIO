@@ -227,7 +227,6 @@ def process_audio():
     eight_d_speed = float(data.get("eight_d_speed", 8))
     eight_d_radius = float(data.get("eight_d_radius", 2.0))
     eight_d_pattern = data.get("eight_d_pattern", "circle")
-    eight_d_doppler = bool(data.get("eight_d_doppler", True))
 
     input_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.{ext}")
     if not os.path.exists(input_path):
@@ -291,14 +290,7 @@ def process_audio():
                 
             stream = ffmpeg.filter(stream, "tremolo", f=str(tremolo_f), d=str(tremolo_depth))
             
-            # 4. Efecto Doppler (Pitch Vibrato por cambio de distancia)
-            if eight_d_doppler:
-                # El vibrato altera el tono. Su intensidad depende del radio.
-                vibrato_depth = min(1.0, eight_d_radius * 0.3) # 0.3 to 1.0 is a very subtle pitch bend in vibrato
-                # La frecuencia de vibrato es la misma del tremolo (cuando se aleja/acerca)
-                stream = ffmpeg.filter(stream, "vibrato", f=str(tremolo_f), d=str(vibrato_depth))
-            
-            # 5. Reverb para añadir profundidad acústica
+            # 4. Reverb para añadir profundidad acústica
             stream = ffmpeg.filter(stream, "aecho", "0.8", "0.88", "40", "0.4")
 
         if fade_in > 0:
@@ -306,6 +298,9 @@ def process_audio():
         if fade_out > 0:
             stream = ffmpeg.filter(stream, "afade", type="out",
                                    start_time=max(0.0, duration_trimmed - fade_out), duration=fade_out)
+
+        # 5. Master Limiter final para evitar CUALQUIER distorsión (clipping) al mezclar múltiples efectos
+        stream = ffmpeg.filter(stream, "alimiter", level_in=1.0, level_out=1.0, limit=-0.5)
 
         codec_kwargs: dict = {}
         if out_format in ("mp3", "m4a"):
