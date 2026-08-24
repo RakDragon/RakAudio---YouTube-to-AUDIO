@@ -580,9 +580,9 @@ function apply8D(ws, isGlobalEdited) {
             const panner = ctx.createPanner();
             panner.panningModel = 'HRTF';
             panner.distanceModel = 'inverse';
-            panner.refDistance = 1.5;
+            panner.refDistance = 1.0;
             panner.maxDistance = 10000;
-            panner.rolloffFactor = 0.35; // smooth distance roll-off without muddy attenuation
+            panner.rolloffFactor = 0.5; // Natural distance rolloff & spatial separation
             panner.coneInnerAngle = 360;
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
@@ -1755,80 +1755,62 @@ async function renderOfflineAudio() {
     source.connect(volNode);
     volNode.connect(fadeNode);
 
-    // 8D Stereo Spatialization for Export (guaranteed to work in all OfflineAudioContext environments)
-    // Uses ScriptProcessor-free, deterministic channel-split + gain curves — all parameters including
-    // radius, speed, direction and pattern are fully baked into the exported audio.
+    // 8D Pure HRTF Spatial Audio Effect (100% Crystal-Clear Master Fidelity)
     const shouldApply8D = lastAppliedState?.eight_d ?? false;
     
     if (shouldApply8D) {
-        const radius  = lastAppliedState?.eight_d_radius  ?? 2.0;
-        const speed   = lastAppliedState?.eight_d_speed   ?? 8;
-        const dir     = lastAppliedState?.eight_d_dir     ?? 'left';
+        const radius = parseFloat(lastAppliedState?.eight_d_radius ?? (slide8DRadius ? slide8DRadius.value : 2.0)) || 2.0;
+
+        const panner = offlineCtx.createPanner();
+        panner.panningModel = 'HRTF';
+        panner.distanceModel = 'inverse';
+        panner.refDistance = 1.0;
+        panner.maxDistance = 10000;
+        panner.rolloffFactor = 0.5;
+        panner.coneInnerAngle = 360;
+        panner.coneOuterAngle = 360;
+        panner.coneOuterGain = 0;
+
+        const speed = lastAppliedState?.eight_d_speed ?? 8;
+        const dir = lastAppliedState?.eight_d_dir ?? 'left';
         const pattern = lastAppliedState?.eight_d_pattern ?? 'circle';
-        const mult    = (dir === 'left') ? 1 : -1;
+        const mult = (dir === 'left') ? 1 : -1;
 
-        // Stereo split/merge nodes for independent L/R gain control
-        const splitter = offlineCtx.createChannelSplitter(2);
-        const merger   = offlineCtx.createChannelMerger(2);
-        const gainL    = offlineCtx.createGain();
-        const gainR    = offlineCtx.createGain();
-
-        // Distance attenuation gain (inverse distance law, radius-based)
-        // Normalized so radius=1.5 (refDist) = unity gain
-        const refDist = 1.5;
-        const distAttenuation = Math.min(1.0, refDist / Math.max(0.1, radius));
-
-        // Build per-frame L/R gain curves using equal-power panning law
-        // Pan value range: -1 (full left) to +1 (full right)
-        const fps    = 120;
+        const fps = 120;
         const frames = Math.max(2, Math.ceil(finalDuration * fps));
-        const curveL = new Float32Array(frames);
-        const curveR = new Float32Array(frames);
-
+        const curveX = new Float32Array(frames);
+        const curveY = new Float32Array(frames);
+        const curveZ = new Float32Array(frames);
+        
         for (let i = 0; i < frames; i++) {
-            const t     = (i / fps) * rate;
+            const t = (i / fps) * rate; // adjust time for playback speed
             const angle = (t / Math.max(1, speed)) * 2 * Math.PI * mult;
-
-            let x, z;
+            let x, y, z;
             if (pattern === 'ellipse') {
                 x = Math.sin(angle) * (radius * 1.6);
                 z = -Math.cos(angle) * (radius * 0.9);
+                y = Math.cos(angle) * (radius * 0.25);
             } else if (pattern === 'figure8') {
                 x = Math.sin(angle) * (radius * 1.4);
                 z = -Math.sin(2 * angle) * (radius * 1.1);
+                y = Math.cos(2 * angle) * (radius * 0.3);
             } else { // circle
                 x = Math.sin(angle) * radius;
                 z = -Math.cos(angle) * radius;
+                y = Math.sin(angle) * (radius * 0.35);
             }
-
-            // Normalize x to pan value [-1, +1]
-            const maxX = (pattern === 'ellipse') ? (radius * 1.6)
-                       : (pattern === 'figure8') ? (radius * 1.4)
-                       : radius;
-            const pan = Math.max(-1.0, Math.min(1.0, x / Math.max(0.001, maxX)));
-
-            // Rear attenuation: sounds behind listener get slightly softer (simulates head shadow)
-            const rearFactor  = Math.max(0.0, z / Math.max(0.001, radius)); // 0 = front, 1 = fully behind
-            const rearAtten   = 1.0 - (rearFactor * 0.25); // max 25% attenuation behind
-
-            // Equal-power pan law
-            const panRad = (pan * 0.5 + 0.5) * (Math.PI / 2); // [0, π/2]
-            curveL[i] = Math.cos(panRad) * distAttenuation * rearAtten;
-            curveR[i] = Math.sin(panRad) * distAttenuation * rearAtten;
+            curveX[i] = x;
+            curveY[i] = y;
+            curveZ[i] = z;
         }
+        
+        panner.positionX.setValueCurveAtTime(curveX, 0, finalDuration);
+        panner.positionY.setValueCurveAtTime(curveY, 0, finalDuration);
+        panner.positionZ.setValueCurveAtTime(curveZ, 0, finalDuration);
 
-        gainL.gain.setValueCurveAtTime(curveL, 0, finalDuration);
-        gainR.gain.setValueCurveAtTime(curveR, 0, finalDuration);
-
-        // Pipeline:
-        //   fadeNode -> splitter -[L]-> gainL -[L]-> merger -> limiter -> destination
-        //                        -[R]-> gainR -[R]-> merger
-        fadeNode.connect(splitter);
-        splitter.connect(gainL, 0);  // left channel
-        splitter.connect(gainR, 1);  // right channel
-        gainL.connect(merger, 0, 0); // gainL -> merger left
-        gainR.connect(merger, 0, 1); // gainR -> merger right
-        merger.connect(limiter);
+        // Pipeline: fadeNode -> panner -> limiter -> destination
+        fadeNode.connect(panner);
+        panner.connect(limiter);
         limiter.connect(offlineCtx.destination);
     } else {
         fadeNode.connect(limiter);
