@@ -21,15 +21,11 @@
 
 ---
 
-### 2. Espacialización Puntual Avanzada 8D Audio (HRTF 3D Sin Reverb Difusa)
-Convierte cualquier pista estéreo en un **objeto puntual suspendido y moviéndose con nitidez cristalina** en un entorno inmersivo de 360 grados:
-- **Motor Binaural HRTF de Alta Precisión**: Diferencias interaurales de tiempo (ITD) y nivel (ILD) calibradas dinámicamente según la posición orbital respecto a los oídos.
-- **Filtro Dinámico de Absorción del Aire (`Air Absorption Filter`)**: Atenuación progresiva de frecuencias ultra-altas dependiente de la distancia física radial (0.5m a 5.0m).
-- **Refuerzo de Presencia Frontal (`Front Presence Filter`)**: Resonancia psicoacústica a 3.6 kHz (+2.5 dB) cuando la fuente sonora se sitúa en el campo frontal ($Z \le 0$), dotando al audio de impacto directo y cercanía visual.
-- **Oclusión Trasera y Sombreado de Cabeza (`Rear Occlusion Filter`)**: Simulación del bloqueo craneal y del pabellón auditivo cuando el sonido rota a espaldas del oyente (22 kHz al frente $\to$ 5.5 kHz detrás).
-- **Muesca Espectral del Pabellón (`Pinna Concha Notch Filter`)**: Filtro notch dinámico a 7.5 kHz (0 dB al frente $\to$ -10 dB detrás) que genera el indicio espectral inequívoco de localización en la nuca.
-- **Cero Reverberación Difusa / Máxima Nitidez**: Sin colas de eco ni turbidez de sala; el sonido permanece limpio, percutivo y suspendido como una fuente puntual en movimiento tridimensional.
-- **Limitador Maestro de Estudio Anti-Clipping (`DynamicsCompressorNode`)**: Etapa de compresión/limitación transparente que preserva el volumen, la pegada y la dinámica sin distorsión digital ni chasquidos.
+### 2. Espacialización Pura 8D Audio (HRTF 3D de Máxima Nitidez)
+Convierte cualquier pista estéreo en una **experiencia envolvente 360° fluida y cristalina**, conservando el 100% de la fidelidad, brillo, graves y pegada del master original:
+- **Motor Binaural HRTF Puro (Full-Bandwidth 20 Hz - 20,000 Hz)**: Utiliza respuestas de impulso de cabeza (HRIR) nativas para generar diferencias de tiempo interaural (ITD) y nivel (ILD) sin recortar frecuencias ni generar efecto subacuático o encajonado.
+- **Sin Coloración ni Filtros Asfixiantes**: Cero filtros comb/notch artificiales y cero atenuaciones excesivas; el audio mantiene sus agudos nítidos, voces claras y graves contundentes idénticos al archivo original.
+- **Limitador Maestro de Estudio Transparente (`DynamicsCompressorNode`)**: Control de dinámica de pico que previene cualquier saturación digital sin alterar la respuesta de frecuencia original.
 - **3 Patrones de Órbita 3D**:
   - `Circular (360° estándar)`: Órbita esférica continua alrededor del oyente con sutil componente de elevación.
   - `Elíptica (Achatada)`: Barrido lateral con mayor separación estéreo en los ejes izquierdo/derecho.

@@ -551,12 +551,7 @@ function destroy8D(ws) {
     if (typeof ws._8d === 'object') {
         if (ws._8d.raf) cancelAnimationFrame(ws._8d.raf);
         try { ws._8d.source?.disconnect(); } catch {}
-        try { ws._8d.airFilter?.disconnect(); } catch {}
-        try { ws._8d.frontPresence?.disconnect(); } catch {}
         try { ws._8d.panner?.disconnect(); } catch {}
-        try { ws._8d.rearOcclusionFilter?.disconnect(); } catch {}
-        try { ws._8d.pinnaNotchFilter?.disconnect(); } catch {}
-        try { ws._8d.distanceGain?.disconnect(); } catch {}
         try { ws._8d.outGain?.disconnect(); } catch {}
         try { ws._8d.limiter?.disconnect(); } catch {}
         try { ws._8d.ctx?.close().catch(() => {}); } catch {}
@@ -564,7 +559,7 @@ function destroy8D(ws) {
     ws._8d = null;
 }
 
-/** Applies Web Audio API nodes for crisp point-source 8D spatialization with ITD/ILD, air absorption, front presence, rear occlusion and pinna filtering. */
+/** Applies pure Web Audio API HRTF 3D spatialization with 100% original master fidelity, crystal clarity, and zero underwater/boxy artifacts. */
 function apply8D(ws, isGlobalEdited) {
     if (!ws) return;
     const audioEl = ws.getMediaElement();
@@ -581,52 +576,22 @@ function apply8D(ws, isGlobalEdited) {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const source = ctx.createMediaElementSource(audioEl);
             
-            // 1. Air Absorption Low-Pass Filter (high-frequency air attenuation based on distance)
-            const airFilter = ctx.createBiquadFilter();
-            airFilter.type = 'lowpass';
-            airFilter.frequency.value = 22000;
-            airFilter.Q.value = 0.7;
-
-            // 2. Front Presence Filter (ear canal / concha resonance boost at 3.6 kHz when in front)
-            const frontPresence = ctx.createBiquadFilter();
-            frontPresence.type = 'peaking';
-            frontPresence.frequency.value = 3600;
-            frontPresence.Q.value = 1.2;
-            frontPresence.gain.value = 0;
-
-            // 3. High-Precision 360 HRTF Binaural Panner (Interaural Time & Level Differences)
+            // Pure 360 HRTF Binaural Spatializer (Preserves 100% full-bandwidth fidelity 20Hz - 20kHz)
             const panner = ctx.createPanner();
             panner.panningModel = 'HRTF';
             panner.distanceModel = 'inverse';
-            panner.refDistance = 1.0;
+            panner.refDistance = 1.5;
             panner.maxDistance = 10000;
-            panner.rolloffFactor = 0.6;
+            panner.rolloffFactor = 0.35; // smooth distance roll-off without muddy attenuation
             panner.coneInnerAngle = 360;
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
 
-            // 4. Dynamic Rear Occlusion Filter (head & ear shadow blocking when behind: 22 kHz -> 5.5 kHz)
-            const rearOcclusionFilter = ctx.createBiquadFilter();
-            rearOcclusionFilter.type = 'lowpass';
-            rearOcclusionFilter.frequency.value = 22000;
-            rearOcclusionFilter.Q.value = 0.75;
-
-            // 5. Pinna Concha Notch Filter (spectral ear flap notch @ 7.5 kHz when behind: 0 dB -> -10 dB)
-            const pinnaNotchFilter = ctx.createBiquadFilter();
-            pinnaNotchFilter.type = 'peaking';
-            pinnaNotchFilter.frequency.value = 7500;
-            pinnaNotchFilter.Q.value = 2.4;
-            pinnaNotchFilter.gain.value = 0;
-
-            // 6. Distance & Proximity Gain
-            const distanceGain = ctx.createGain();
-            distanceGain.gain.value = 1.0;
-
-            // 7. Master Output Collector & Volume
+            // Master Volume / Output collector
             const outGain = ctx.createGain();
             outGain.gain.value = 1.0;
 
-            // 8. Studio Brickwall Limiter (preserves full volume punch without clipping/distortion)
+            // Transparent Studio Limiter (prevents digital clipping without coloring frequency response)
             const limiter = ctx.createDynamicsCompressor();
             limiter.threshold.setValueAtTime(-0.8, ctx.currentTime);
             limiter.knee.setValueAtTime(2.0, ctx.currentTime);
@@ -634,24 +599,19 @@ function apply8D(ws, isGlobalEdited) {
             limiter.attack.setValueAtTime(0.002, ctx.currentTime);
             limiter.release.setValueAtTime(0.05, ctx.currentTime);
 
-            // Point-Source Spatial Pipeline:
-            // source -> airFilter -> frontPresence -> panner -> rearOcclusionFilter -> pinnaNotchFilter -> distanceGain -> outGain -> limiter -> destination
-            source.connect(airFilter);
-            airFilter.connect(frontPresence);
-            frontPresence.connect(panner);
-            panner.connect(rearOcclusionFilter);
-            rearOcclusionFilter.connect(pinnaNotchFilter);
-            pinnaNotchFilter.connect(distanceGain);
-            distanceGain.connect(outGain);
+            // Clean, uncolored spatial pipeline:
+            // source -> panner -> outGain -> limiter -> destination
+            source.connect(panner);
+            panner.connect(outGain);
             outGain.connect(limiter);
             limiter.connect(ctx.destination);
 
             ws._8d = {
-                ctx, airFilter, frontPresence, panner, rearOcclusionFilter, pinnaNotchFilter, distanceGain, outGain, limiter,
+                ctx, panner, outGain, limiter,
                 source, raf: null, isActive: false, isCurrentlyApplied: false
             };
             
-            // Animation loop for smooth 360 rotation & spatial filtering
+            // Animation loop for smooth 360 rotation
             const updatePan = () => {
                 if (ws._8d && ws._8d.isActive && !audioEl.paused) {
                     const isTrimWs = (ws === wsTrim);
@@ -698,25 +658,6 @@ function apply8D(ws, isGlobalEdited) {
                     ws._8d.panner.positionX.value = x;
                     ws._8d.panner.positionY.value = y;
                     ws._8d.panner.positionZ.value = z;
-
-                    // Air Absorption Filter based on distance radius
-                    const airCutoff = 22000 - Math.min(1.0, Math.max(0.0, (radius - 0.5) / 4.5)) * 3500;
-                    ws._8d.airFilter.frequency.value = airCutoff;
-
-                    // Front Presence Boost (when Z <= 0, sound is in front of the listener)
-                    const frontFactor = Math.min(1.0, Math.max(0.0, -z / (radius || 1)));
-                    const presenceGain = frontFactor * 2.5; // +2.5 dB crispness in front
-                    ws._8d.frontPresence.gain.value = presenceGain;
-
-                    // Rear Head-Shadow Occlusion & Pinna Concha Notch (when Z > 0, sound is behind)
-                    const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
-                    const occlusionCutoff = 22000 - (rearFactor * 16500); // down to 5500 Hz behind
-                    const notchGain = -(rearFactor * 10.0); // -10 dB pinna notch behind
-                    const distGain = (1.0 / (1.0 + 0.22 * (radius - 1.0))) * (1.0 - (rearFactor * 0.18));
-
-                    ws._8d.rearOcclusionFilter.frequency.value = occlusionCutoff;
-                    ws._8d.pinnaNotchFilter.gain.value         = notchGain;
-                    ws._8d.distanceGain.gain.value             = distGain;
                     
                     if (radarCanvas) {
                         const ctxRadar = radarCanvas.getContext('2d');
@@ -770,7 +711,7 @@ function apply8D(ws, isGlobalEdited) {
             ws._8d.isCurrentlyApplied = shouldApply;
             if (shouldApply) {
                 try { ws._8d.source.disconnect(); } catch(e){}
-                ws._8d.source.connect(ws._8d.airFilter);
+                ws._8d.source.connect(ws._8d.panner);
                 if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
             } else {
                 // Bypass
@@ -1814,49 +1755,21 @@ async function renderOfflineAudio() {
     source.connect(volNode);
     volNode.connect(fadeNode);
 
-    // 8D Point-Source Spatial Audio Effect
+    // 8D Pure HRTF Spatial Audio Effect (100% Crystal-Clear Master Fidelity)
     const shouldApply8D = lastAppliedState?.eight_d ?? false;
     
     if (shouldApply8D) {
         const radius = lastAppliedState?.eight_d_radius ?? 2.0;
 
-        // 1. Air Absorption Low-Pass Filter
-        const airFilter = offlineCtx.createBiquadFilter();
-        airFilter.type = 'lowpass';
-        const airCutoff = 22000 - Math.min(1.0, Math.max(0.0, (radius - 0.5) / 4.5)) * 3500;
-        airFilter.frequency.setValueAtTime(airCutoff, 0);
-        airFilter.Q.setValueAtTime(0.7, 0);
-
-        // 2. Front Presence Filter (peaking @ 3.6 kHz)
-        const frontPresence = offlineCtx.createBiquadFilter();
-        frontPresence.type = 'peaking';
-        frontPresence.frequency.setValueAtTime(3600, 0);
-        frontPresence.Q.setValueAtTime(1.2, 0);
-
-        // 3. HRTF 3D Panner
         const panner = offlineCtx.createPanner();
         panner.panningModel = 'HRTF';
         panner.distanceModel = 'inverse';
-        panner.refDistance = 1.0;
+        panner.refDistance = 1.5;
         panner.maxDistance = 10000;
-        panner.rolloffFactor = 0.6;
+        panner.rolloffFactor = 0.35;
         panner.coneInnerAngle = 360;
         panner.coneOuterAngle = 360;
         panner.coneOuterGain = 0;
-
-        // 4. Dynamic Rear Occlusion Filter
-        const rearOcclusionFilter = offlineCtx.createBiquadFilter();
-        rearOcclusionFilter.type = 'lowpass';
-        rearOcclusionFilter.Q.setValueAtTime(0.75, 0);
-
-        // 5. Pinna Concha Notch Filter (@ 7.5 kHz)
-        const pinnaNotchFilter = offlineCtx.createBiquadFilter();
-        pinnaNotchFilter.type = 'peaking';
-        pinnaNotchFilter.frequency.setValueAtTime(7500, 0);
-        pinnaNotchFilter.Q.setValueAtTime(2.4, 0);
-
-        // 6. Distance & Proximity Gain
-        const distanceGain = offlineCtx.createGain();
 
         const speed = lastAppliedState?.eight_d_speed ?? 8;
         const dir = lastAppliedState?.eight_d_dir ?? 'left';
@@ -1868,10 +1781,6 @@ async function renderOfflineAudio() {
         const curveX = new Float32Array(frames);
         const curveY = new Float32Array(frames);
         const curveZ = new Float32Array(frames);
-        const curveFrontPresence = new Float32Array(frames);
-        const curveRearOcclusion = new Float32Array(frames);
-        const curvePinnaNotch = new Float32Array(frames);
-        const curveDistGain = new Float32Array(frames);
         
         for (let i = 0; i < frames; i++) {
             const t = (i / fps) * rate; // adjust time for playback speed
@@ -1893,32 +1802,15 @@ async function renderOfflineAudio() {
             curveX[i] = x;
             curveY[i] = y;
             curveZ[i] = z;
-
-            const frontFactor = Math.min(1.0, Math.max(0.0, -z / (radius || 1)));
-            curveFrontPresence[i] = frontFactor * 2.5;
-
-            const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
-            curveRearOcclusion[i] = 22000 - (rearFactor * 16500);
-            curvePinnaNotch[i]    = -(rearFactor * 10.0);
-            curveDistGain[i]      = (1.0 / (1.0 + 0.22 * (radius - 1.0))) * (1.0 - (rearFactor * 0.18));
         }
         
         panner.positionX.setValueCurveAtTime(curveX, 0, finalDuration);
         panner.positionY.setValueCurveAtTime(curveY, 0, finalDuration);
         panner.positionZ.setValueCurveAtTime(curveZ, 0, finalDuration);
-        frontPresence.gain.setValueCurveAtTime(curveFrontPresence, 0, finalDuration);
-        rearOcclusionFilter.frequency.setValueCurveAtTime(curveRearOcclusion, 0, finalDuration);
-        pinnaNotchFilter.gain.setValueCurveAtTime(curvePinnaNotch, 0, finalDuration);
-        distanceGain.gain.setValueCurveAtTime(curveDistGain, 0, finalDuration);
 
-        // Pipeline: fadeNode -> airFilter -> frontPresence -> panner -> rearOcclusionFilter -> pinnaNotchFilter -> distanceGain -> limiter -> destination
-        fadeNode.connect(airFilter);
-        airFilter.connect(frontPresence);
-        frontPresence.connect(panner);
-        panner.connect(rearOcclusionFilter);
-        rearOcclusionFilter.connect(pinnaNotchFilter);
-        pinnaNotchFilter.connect(distanceGain);
-        distanceGain.connect(limiter);
+        // Pipeline: fadeNode -> panner -> limiter -> destination
+        fadeNode.connect(panner);
+        panner.connect(limiter);
         limiter.connect(offlineCtx.destination);
     } else {
         fadeNode.connect(limiter);
