@@ -522,7 +522,13 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
         vol = maxVol * ((end - currentTime) / outSec);
     }
 
-    ws.setVolume(Math.max(0, Math.min(2.0, vol)));
+    const clampedVol = Math.max(0, Math.min(2.0, vol));
+    if (ws._8d && ws._8d.outGain) {
+        ws._8d.outGain.gain.value = clampedVol;
+        ws.setVolume(1.0);
+    } else {
+        ws.setVolume(Math.min(1.0, clampedVol));
+    }
 
     const isEdited = (ws === wsTrim || isGlobalEdited);
     const tempoVal    = isEdited ? parseFloat(tempoSlider ? tempoSlider.value : 1.0) : 1.0;
@@ -539,18 +545,30 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
     apply8D(ws, isGlobalEdited);
 }
 
-/** Generate synthetic binaural room impulse response for realistic spatial 3D presence. */
-function createImpulseResponse(ctx, duration = 0.5, decay = 3.0) {
+/** Generate synthetic binaural room impulse response with smooth envelope and high-frequency decay. */
+function createImpulseResponse(ctx, duration = 0.5, decay = 2.8) {
     const sampleRate = ctx.sampleRate;
     const length = Math.max(1, Math.floor(sampleRate * duration));
     const impulse = ctx.createBuffer(2, length, sampleRate);
     const left = impulse.getChannelData(0);
     const right = impulse.getChannelData(1);
+    
+    // Smooth 15ms attack ramp to avoid transient click at t=0
+    const attackLength = Math.floor(sampleRate * 0.015);
+    
     for (let i = 0; i < length; i++) {
         const t = i / sampleRate;
-        const env = Math.exp(-decay * t);
-        left[i] = (Math.random() * 2 - 1) * env;
-        right[i] = (Math.random() * 2 - 1) * env;
+        let env = Math.exp(-decay * t);
+        if (i < attackLength) {
+            env *= (i / attackLength); // Fade in smoothly from 0
+        }
+        
+        // High frequency damping over time
+        const damp = Math.exp(-decay * 1.6 * t);
+        const noiseL = (Math.random() * 2 - 1) * 0.75 + (Math.random() * 2 - 1) * 0.25 * damp;
+        const noiseR = (Math.random() * 2 - 1) * 0.75 + (Math.random() * 2 - 1) * 0.25 * damp;
+        left[i]  = noiseL * env;
+        right[i] = noiseR * env;
     }
     return impulse;
 }
@@ -567,6 +585,7 @@ function destroy8D(ws) {
         try { ws._8d.convolver?.disconnect(); } catch {}
         try { ws._8d.verbGain?.disconnect(); } catch {}
         try { ws._8d.outGain?.disconnect(); } catch {}
+        try { ws._8d.limiter?.disconnect(); } catch {}
         try { ws._8d.ctx?.close().catch(() => {}); } catch {}
     }
     ws._8d = null;
@@ -595,7 +614,7 @@ function apply8D(ws, isGlobalEdited) {
             panner.distanceModel = 'inverse';
             panner.refDistance = 1.0;
             panner.maxDistance = 10000;
-            panner.rolloffFactor = 1.0;
+            panner.rolloffFactor = 0.5;
             panner.coneInnerAngle = 360;
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
@@ -603,22 +622,30 @@ function apply8D(ws, isGlobalEdited) {
             // Pinna / Head-Shadow dynamic lowpass filter (drops high freqs when behind head)
             const rearFilter = ctx.createBiquadFilter();
             rearFilter.type = 'lowpass';
-            rearFilter.frequency.setValueAtTime(20000, ctx.currentTime);
-            rearFilter.Q.setValueAtTime(0.7, ctx.currentTime);
+            rearFilter.frequency.value = 22000;
+            rearFilter.Q.value = 0.7;
 
             // Proximity & Distance gain node
             const rearGain = ctx.createGain();
-            rearGain.gain.setValueAtTime(1.0, ctx.currentTime);
+            rearGain.gain.value = 1.0;
 
             // Spatial Ambience Reverb
             const convolver = ctx.createConvolver();
-            convolver.buffer = createImpulseResponse(ctx, 0.5, 3.0);
+            convolver.buffer = createImpulseResponse(ctx, 0.5, 2.8);
             const verbGain = ctx.createGain();
-            verbGain.gain.setValueAtTime(0.12, ctx.currentTime);
+            verbGain.gain.value = 0.08;
 
-            // Main output collector
+            // Master Volume / Output collector
             const outGain = ctx.createGain();
-            outGain.connect(ctx.destination);
+            outGain.gain.value = 1.0;
+
+            // Safety Brickwall Limiter to guarantee ZERO clipping/popping
+            const limiter = ctx.createDynamicsCompressor();
+            limiter.threshold.setValueAtTime(-0.8, ctx.currentTime);
+            limiter.knee.setValueAtTime(2.0, ctx.currentTime);
+            limiter.ratio.setValueAtTime(20.0, ctx.currentTime);
+            limiter.attack.setValueAtTime(0.002, ctx.currentTime);
+            limiter.release.setValueAtTime(0.05, ctx.currentTime);
 
             // Spatial chain: panner -> rearFilter -> rearGain -> outGain
             panner.connect(rearFilter);
@@ -629,8 +656,12 @@ function apply8D(ws, isGlobalEdited) {
             convolver.connect(verbGain);
             verbGain.connect(outGain);
 
+            // Output chain: outGain -> limiter -> destination
+            outGain.connect(limiter);
+            limiter.connect(ctx.destination);
+
             ws._8d = {
-                ctx, panner, rearFilter, rearGain, convolver, verbGain, outGain,
+                ctx, panner, rearFilter, rearGain, convolver, verbGain, outGain, limiter,
                 source, raf: null, isActive: false, isCurrentlyApplied: false
             };
             
@@ -652,7 +683,8 @@ function apply8D(ws, isGlobalEdited) {
                         : (lastAppliedState?.eight_d_radius ?? 2.0);
                     const t = ws.getCurrentTime();
                     
-                    const mult = dir === 'left' ? -1 : 1;
+                    // Left-to-Right: mult = +1; Right-to-Left: mult = -1
+                    const mult = (dir === 'left') ? 1 : -1;
                     let angle;
                     
                     if (isRadarDragging) {
@@ -663,31 +695,33 @@ function apply8D(ws, isGlobalEdited) {
                     
                     let x, y, z;
                     if (pattern === 'ellipse') {
-                        x = Math.sin(angle) * (radius * 1.45);
-                        z = -Math.cos(angle) * (radius * 0.85);
-                        y = Math.cos(angle) * (radius * 0.2);
+                        x = Math.sin(angle) * (radius * 1.6);
+                        z = -Math.cos(angle) * (radius * 0.9);
+                        y = Math.cos(angle) * (radius * 0.25);
                     } else if (pattern === 'figure8') {
-                        x = Math.sin(angle) * (radius * 1.25);
-                        z = -Math.sin(2 * angle) * (radius * 0.95);
-                        y = Math.cos(2 * angle) * (radius * 0.25);
+                        x = Math.sin(angle) * (radius * 1.4);
+                        z = -Math.sin(2 * angle) * (radius * 1.1);
+                        y = Math.cos(2 * angle) * (radius * 0.3);
                     } else { // circle
                         x = Math.sin(angle) * radius;
                         z = -Math.cos(angle) * radius;
-                        y = Math.sin(angle * 0.5) * (radius * 0.12);
+                        y = Math.sin(angle) * (radius * 0.35);
                     }
                     
-                    const now = ws._8d.ctx.currentTime;
-                    ws._8d.panner.positionX.setTargetAtTime(x, now, 0.04);
-                    ws._8d.panner.positionY.setTargetAtTime(y, now, 0.04);
-                    ws._8d.panner.positionZ.setTargetAtTime(z, now, 0.04);
+                    // Direct smooth value assignment — zero clicks / zero zipper noise
+                    ws._8d.panner.positionX.value = x;
+                    ws._8d.panner.positionY.value = y;
+                    ws._8d.panner.positionZ.value = z;
 
-                    // Dynamic head-shadow effect: 20kHz when in front, down to 6.5kHz behind head
-                    const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
-                    const cutoff = 20000 - (rearFactor * 13500);
-                    const distGain = 1.0 - (rearFactor * 0.15);
+                    // Dynamic head-shadow effect: 22kHz in front, down to 7.5kHz behind head
+                    const zNorm = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
+                    const cutoff = 22000 - (zNorm * 14500);
+                    const distGain = 1.0 - (zNorm * 0.20);
+                    const reverbGain = 0.07 + (zNorm * 0.06);
 
-                    if (ws._8d.rearFilter) ws._8d.rearFilter.frequency.setTargetAtTime(cutoff, now, 0.04);
-                    if (ws._8d.rearGain) ws._8d.rearGain.gain.setTargetAtTime(distGain, now, 0.04);
+                    if (ws._8d.rearFilter) ws._8d.rearFilter.frequency.value = cutoff;
+                    if (ws._8d.rearGain)   ws._8d.rearGain.gain.value       = distGain;
+                    if (ws._8d.verbGain)   ws._8d.verbGain.gain.value       = reverbGain;
                     
                     if (radarCanvas) {
                         const ctxRadar = radarCanvas.getContext('2d');
@@ -695,19 +729,19 @@ function apply8D(ws, isGlobalEdited) {
                         const cx = radarCanvas.width / 2;
                         const cy = radarCanvas.height / 2;
                         
-                        // Map physical radius [0.5 - 5.0] to visual canvas radius [14 - 40]
-                        const rVis = 14 + ((radius - 0.5) / 4.5) * 26;
+                        // Map physical radius [0.5 - 5.0] to visual canvas radius [14 - 38]
+                        const rVis = 14 + ((radius - 0.5) / 4.5) * 24;
                         let visX, visY;
                         
                         if (pattern === 'ellipse') {
                             visX = cx + Math.sin(angle) * (rVis * 1.35);
-                            visY = cy + Math.cos(angle) * (rVis * 0.8);
+                            visY = cy - Math.cos(angle) * (rVis * 0.8);
                         } else if (pattern === 'figure8') {
-                            visX = cx + Math.sin(angle) * (rVis * 1.2);
-                            visY = cy + Math.sin(2 * angle) * (rVis * 0.85);
+                            visX = cx + Math.sin(angle) * (rVis * 1.25);
+                            visY = cy - Math.sin(2 * angle) * (rVis * 0.9);
                         } else {
                             visX = cx + Math.sin(angle) * rVis;
-                            visY = cy + Math.cos(angle) * rVis;
+                            visY = cy - Math.cos(angle) * rVis;
                         }
                         
                         ctxRadar.beginPath();
@@ -716,7 +750,7 @@ function apply8D(ws, isGlobalEdited) {
                         ctxRadar.shadowBlur = 10;
                         ctxRadar.shadowColor = '#FF422E';
                         ctxRadar.fill();
-                        ctxRadar.fill(); // double fill for strong shadow
+                        ctxRadar.fill();
                         ctxRadar.shadowBlur = 0;
                     }
                 } else if (ws._8d && !ws._8d.isActive && radarCanvas) {
@@ -945,7 +979,12 @@ function initWaveSurfer() {
         plugins:   [WaveSurfer.Hover.create(HOVER_OPTS)],
     });
 
-    wsGlobal.on('play',  () => { if (!isSwitchingView) btnPlayPause.textContent = 'Pause'; });
+    wsGlobal.on('play',  () => {
+        if (!isSwitchingView) btnPlayPause.textContent = 'Pause';
+        if (wsGlobal._8d && wsGlobal._8d.ctx && wsGlobal._8d.ctx.state === 'suspended') {
+            wsGlobal._8d.ctx.resume();
+        }
+    });
     wsGlobal.on('pause', () => { if (!isSwitchingView) btnPlayPause.textContent = 'Play';  });
 
     wsGlobal.on('ready', () => {
@@ -1129,7 +1168,12 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
             plugins:    [wsRegions, WaveSurfer.Hover.create(HOVER_OPTS)],
         });
 
-        wsTrim.on('play',  () => { if (lblPlayTrim) lblPlayTrim.textContent = 'Pausar Selección'; });
+        wsTrim.on('play',  () => {
+            if (lblPlayTrim) lblPlayTrim.textContent = 'Pausar Selección';
+            if (wsTrim._8d && wsTrim._8d.ctx && wsTrim._8d.ctx.state === 'suspended') {
+                wsTrim._8d.ctx.resume();
+            }
+        });
         wsTrim.on('pause', () => {
             if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
             if (btnPlayTrim) btnPlayTrim.style.setProperty('--trim-progress', '0%');
@@ -1399,7 +1443,7 @@ if (radarCanvas) {
             const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
             const dir = sel8DDir ? sel8DDir.value : 'left';
             const t = ws.getCurrentTime();
-            const mult = dir === 'left' ? -1 : 1;
+            const mult = (dir === 'left') ? 1 : -1;
             const autoBaseAngle = (t / speed) * 2 * Math.PI * mult;
             radarAngleOffset = radarManualAngle - autoBaseAngle;
         }
@@ -1766,6 +1810,14 @@ async function renderOfflineAudio() {
         fadeNode.gain.linearRampToValueAtTime(0, finalDuration);
     }
 
+    // Safety Brickwall Limiter to guarantee ZERO distortion or clipping in exports
+    const limiter = offlineCtx.createDynamicsCompressor();
+    limiter.threshold.setValueAtTime(-0.8, 0);
+    limiter.knee.setValueAtTime(2.0, 0);
+    limiter.ratio.setValueAtTime(20.0, 0);
+    limiter.attack.setValueAtTime(0.002, 0);
+    limiter.release.setValueAtTime(0.05, 0);
+
     source.connect(volNode);
     volNode.connect(fadeNode);
 
@@ -1778,7 +1830,7 @@ async function renderOfflineAudio() {
         panner.distanceModel = 'inverse';
         panner.refDistance = 1.0;
         panner.maxDistance = 10000;
-        panner.rolloffFactor = 1.0;
+        panner.rolloffFactor = 0.5;
         panner.coneInnerAngle = 360;
         panner.coneOuterAngle = 360;
         panner.coneOuterGain = 0;
@@ -1793,17 +1845,17 @@ async function renderOfflineAudio() {
 
         // Spatial Ambience Reverb
         const convolver = offlineCtx.createConvolver();
-        convolver.buffer = createImpulseResponse(offlineCtx, 0.5, 3.0);
+        convolver.buffer = createImpulseResponse(offlineCtx, 0.5, 2.8);
         const verbGain = offlineCtx.createGain();
-        verbGain.gain.setValueAtTime(0.12, 0);
+        verbGain.gain.setValueAtTime(0.08, 0);
 
         const speed = lastAppliedState?.eight_d_speed ?? 8;
         const dir = lastAppliedState?.eight_d_dir ?? 'left';
         const pattern = lastAppliedState?.eight_d_pattern ?? 'circle';
         const radius = lastAppliedState?.eight_d_radius ?? 2.0;
-        const mult = dir === 'left' ? -1 : 1;
+        const mult = (dir === 'left') ? 1 : -1;
 
-        const fps = 100;
+        const fps = 120;
         const frames = Math.max(2, Math.ceil(finalDuration * fps));
         const curveX = new Float32Array(frames);
         const curveY = new Float32Array(frames);
@@ -1816,24 +1868,24 @@ async function renderOfflineAudio() {
             const angle = (t / Math.max(1, speed)) * 2 * Math.PI * mult;
             let x, y, z;
             if (pattern === 'ellipse') {
-                x = Math.sin(angle) * (radius * 1.45);
-                z = -Math.cos(angle) * (radius * 0.85);
-                y = Math.cos(angle) * (radius * 0.2);
+                x = Math.sin(angle) * (radius * 1.6);
+                z = -Math.cos(angle) * (radius * 0.9);
+                y = Math.cos(angle) * (radius * 0.25);
             } else if (pattern === 'figure8') {
-                x = Math.sin(angle) * (radius * 1.25);
-                z = -Math.sin(2 * angle) * (radius * 0.95);
-                y = Math.cos(2 * angle) * (radius * 0.25);
+                x = Math.sin(angle) * (radius * 1.4);
+                z = -Math.sin(2 * angle) * (radius * 1.1);
+                y = Math.cos(2 * angle) * (radius * 0.3);
             } else { // circle
                 x = Math.sin(angle) * radius;
                 z = -Math.cos(angle) * radius;
-                y = Math.sin(angle * 0.5) * (radius * 0.12);
+                y = Math.sin(angle) * (radius * 0.35);
             }
             curveX[i] = x;
             curveY[i] = y;
             curveZ[i] = z;
-            const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
-            curveCutoff[i] = 20000 - (rearFactor * 13500);
-            curveDistGain[i] = 1.0 - (rearFactor * 0.15);
+            const zNorm = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
+            curveCutoff[i] = 22000 - (zNorm * 14500);
+            curveDistGain[i] = 1.0 - (zNorm * 0.20);
         }
         
         panner.positionX.setValueCurveAtTime(curveX, 0, finalDuration);
@@ -1842,21 +1894,81 @@ async function renderOfflineAudio() {
         rearFilter.frequency.setValueCurveAtTime(curveCutoff, 0, finalDuration);
         rearGain.gain.setValueCurveAtTime(curveDistGain, 0, finalDuration);
 
-        // Dry spatial path: fadeNode -> panner -> rearFilter -> rearGain -> destination
+        // Dry spatial path: fadeNode -> panner -> rearFilter -> rearGain -> limiter
         fadeNode.connect(panner);
         panner.connect(rearFilter);
         rearFilter.connect(rearGain);
-        rearGain.connect(offlineCtx.destination);
+        rearGain.connect(limiter);
 
-        // Wet spatial reverb path: fadeNode -> convolver -> verbGain -> destination
+        // Wet spatial reverb path: fadeNode -> convolver -> verbGain -> limiter
         fadeNode.connect(convolver);
         convolver.connect(verbGain);
-        verbGain.connect(offlineCtx.destination);
+        verbGain.connect(limiter);
+
+        // Limiter -> destination
+        limiter.connect(offlineCtx.destination);
     } else {
-        fadeNode.connect(offlineCtx.destination);
+        fadeNode.connect(limiter);
+        limiter.connect(offlineCtx.destination);
     }
 
     source.start(0, start, durationSecs);
     const renderedBuffer = await offlineCtx.startRendering();
     return audioBufferToWav(renderedBuffer);
+}
+
+/** Convert an AudioBuffer into a compliant 16-bit PCM WAV Blob with soft-knee limiting to prevent any digital distortion. */
+function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate  = buffer.sampleRate;
+    const format      = 1; // PCM
+    const bitDepth    = 16;
+    const length      = buffer.length;
+    
+    // Interleave channels
+    const interleaved = new Float32Array(length * numChannels);
+    for (let channel = 0; channel < numChannels; channel++) {
+        const channelData = buffer.getChannelData(channel);
+        for (let i = 0; i < length; i++) {
+            interleaved[i * numChannels + channel] = channelData[i];
+        }
+    }
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign     = numChannels * bytesPerSample;
+    const wavBuffer      = new ArrayBuffer(44 + interleaved.length * bytesPerSample);
+    const view           = new DataView(wavBuffer);
+    
+    const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+    
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + interleaved.length * bytesPerSample, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, interleaved.length * bytesPerSample, true);
+    
+    // Soft limiter (tanh curve) to prevent hard clipping artifacts on integer conversion
+    let offset = 44;
+    for (let i = 0; i < interleaved.length; i++, offset += 2) {
+        let s = interleaved[i];
+        if (s > 1.0 || s < -1.0) {
+            s = Math.tanh(s); // smooth soft-limiting saturation instead of harsh square-wave clipping
+        }
+        s = Math.max(-1.0, Math.min(1.0, s));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    
+    return new Blob([view], { type: 'audio/wav' });
 }
