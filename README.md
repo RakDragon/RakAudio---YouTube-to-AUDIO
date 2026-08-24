@@ -1,47 +1,78 @@
 # RakAudio - YouTube to AUDIO
 
-> Herramienta local avanzada para descargar, previsualizar, editar y procesar audios de YouTube en tiempo real con una interfaz moderna y fluida.
+> Herramienta profesional y moderna para descargar, previsualizar en tiempo real, editar y procesar pistas de audio de YouTube con espacialización **8D Audio HRTF**, procesamiento DSP avanzado y renderizado de alta fidelidad.
 
 ---
 
-## Características Principales
+## 🌟 Características Principales
 
-### 1. Extracción y Descarga de Audio
-- **Descarga directa en alta calidad** desde enlaces de YouTube utilizando `yt-dlp` y `FFmpeg`.
-- **Múltiples formatos de exportación**: `MP3`, `M4A`, `WAV`, `FLAC`, `AAC`, `OPUS`.
-- **Selector de calidad**: Desde `128 kbps` hasta `320 kbps` (o bitrate máximo según formato).
-- **Lectura completa de metadatos**: Título, canal, número de vistas, fecha de publicación, duración y miniatura en alta resolución.
-- **Progreso en tiempo real**: Transmisión de progreso de descarga vía *Server-Sent Events* (SSE).
-
----
-
-### 2. Previsualización y Ajustes Globales
-- **Onda Espectral Interactiva**: Renderizado dinámico de la onda con `WaveSurfer.js v7`.
-- **Alternador de Vista (Original vs. Editado)**:
-  - **Original**: Reproducción limpia del audio crudo extraído con su propio control de volumen independiente.
-  - **Editado**: Previsualización en vivo de todos los efectos aplicados (recortes, fades, velocidad, tono, volumen manual, normalización y reverse) sin necesidad de procesar el archivo completo previamente.
-  - **Transición sin saltos**: Reproducción continua e ininterrumpida al alternar entre ambas vistas.
-- **Controles completos de reproducción**: Play/Pause, salto rápido de ±5s, ±10s e ir al inicio o final de la pista.
+### 1. Extracción y Descarga de Audio en Alta Calidad
+- **Descarga directa** desde cualquier enlace de YouTube o YouTube Shorts mediante `yt-dlp` y `FFmpeg`.
+- **Múltiples formatos de exportación profesional**:
+  - `MP3` (MPEG Layer-3)
+  - `M4A` (AAC en contenedor MP4)
+  - `WAV` (PCM sin compresión)
+  - `FLAC` (Free Lossless Audio Codec)
+  - `AAC` (Advanced Audio Coding)
+  - `OPUS` (Códec interactivo de alta eficiencia)
+- **Selector de tasa de bits (Bitrate)**: Desde `128 kbps` hasta `320 kbps` (o bitrate máximo nativo para formatos sin pérdida).
+- **Extracción completa de metadatos**: Título, canal/artista, número de reproducciones, fecha de subida, duración y carátula/miniatura en alta resolución con fondo dinámico blur.
+- **Progreso en tiempo real**: Notificaciones inmediatas del estado de descarga y conversión mediante *Server-Sent Events* (SSE).
 
 ---
 
-### 3. Panel "MÁS HERRAMIENTAS" (Edición Avanzada)
+### 2. Espacialización Avanzada 8D Audio (HRTF 3D)
+Convierte cualquier pista estéreo convencional en una experiencia inmersiva envolvente de 360 grados para auriculares:
+- **Motor Binaural HRTF**: Cálculo dinámico de retardo interaural de tiempo (ITD) y diferencia interaural de nivel (ILD) con `PannerNode` en modo `HRTF`.
+- **Sombreado Psicoacústico de Cabeza (Pinna / Head-Shadow Effect)**: Filtro dinámico de paso bajo que simula el bloqueo físico del pabellón auditivo cuando la fuente sonora se desplaza detrás del oyente (22 kHz al frente $\to$ 7.5 kHz detrás).
+- **Acústica de Sala y Espacio Tridimensional**: Reverberación convolutiva suave con respuesta de impulso calibrada y rampa de ataque de 15 ms que añade profundidad espacial sin picos transitorios.
+- **Limitador Maestro de Estudio Anti-Clipping (`DynamicsCompressorNode`)**: Etapa de compresión y limitación que garantiza cero distorsión digital, golpeteos o chasquidos (*pops/clicks*), tanto en la reproducción en vivo como en el archivo descargado.
+- **3 Patrones de Órbita 3D**:
+  - `Circular (360° estándar)`: Órbita esférica continua alrededor del oyente con sutil componente de elevación.
+  - `Elíptica (Achatada)`: Barrido lateral con mayor separación estéreo en los ejes izquierdo/derecho.
+  - `Figura en 8 (Oscilación)`: Trayectoria en bucle infinito con cruces frontales y traseros.
+- **Selector de Dirección de Giro**:
+  - `Izquierda ➔ Derecha`: El sonido viaja desde el flanco izquierdo a través del frente hacia la derecha.
+  - `Derecha ➔ Izquierda`: El sonido viaja desde el flanco derecho a través del frente hacia la izquierda.
+- **Parámetros Personalizables**: Tiempo de vuelta (velocidad de 4s a 20s) y radio de distancia (0.5m a 5.0m).
+- **Radar Visual Interactivo en Tiempo Real**:
+  - Visualizador en `<canvas>` integrado con la silueta de la cabeza del oyente.
+  - Permite arrastrar el orbe sonoro con el ratón o pantalla táctil para posicionar manualmente la fuente de audio en cualquier ángulo espacial en vivo.
+
+---
+
+### 3. Previsualización y Ajustes Globales
+- **Onda Espectral Interactiva**: Visualización de audio de alta precisión impulsada por `WaveSurfer.js v7`.
+- **Alternador de Vista en Vivo (Original vs. Editado)**:
+  - **Original**: Reproducción limpia del audio crudo extraído con control de volumen independiente.
+  - **Editado**: Previsualización instantánea de todos los efectos combinados (recortes, fades, 8D, pitch, tempo, volumen manual, normalización y reversa) sin requerir re-procesamientos pesados en el servidor.
+  - **Transición sin saltos**: Sincronización continua de tiempo al alternar entre vistas.
+- **Controles de Transporte**: Play/Pausa, rebobinar/avanzar 5s, 10s, salto a inicio/final.
+
+---
+
+### 4. Panel "MÁS HERRAMIENTAS" (Suite de Edición)
 - **Recorte Preciso de Audio**:
-  - Definición de límites mediante tiradores visuales izquierdo y derecho sobre el espectrograma.
-  - Botón **"Escuchar Selección"** con barra de progreso integrada en el fondo del botón (*fill progresivo* de izquierda a derecha).
-- **Efectos de Fade In / Fade Out**:
-  - Transiciones suaves de entrada y salida configurables en segundos.
-  - Sombra y curva de decoloración visual proyectada directamente sobre la onda espectral.
-- **Procesamiento en Vivo**:
-  - **Ajuste de Volumen Manual**: Incremento o atenuación de 0% a 200%.
-  - **Velocidad (Tempo)**: Variación en tiempo real desde 0.25x hasta 4.00x.
-  - **Cambio de Tono (Pitch)**: Ajuste de ±12 semitonos conservando o ajustando el tempo.
-  - **Normalización EBU R128**: Estándar profesional de volumen para transmisiones (+3.5 dB de ganancia).
-  - **Invertir Audio (Audio Reverse)**: Invierte la pista de audio e invierte horizontalmente el espectrograma (*Effect Flip*) tanto en el editor como en la previsualización global.
+  - Selección de intervalos mediante tiradores interactivos sobre el espectrograma.
+  - Botón **"Escuchar Selección"** con indicador de progreso integrado en el fondo (*fill progresivo*).
+- **Transiciones Fade In / Fade Out**:
+  - Curvas de entrada y salida configurables en segundos con proyección visual sombreada sobre la onda espectral.
+- **Ajustes de Audio DSP**:
+  - **Ajuste de Volumen Manual**: Ganancia limpia de 0% a 200%.
+  - **Velocidad (Tempo)**: Variación de 0.25x a 4.00x en tiempo real.
+  - **Cambio de Tono (Pitch)**: Modificación de tono de -12 a +12 semitonos.
+  - **Normalización EBU R128**: Nivelación estándar de sonoridad para transmisiones (+3.5 dB de ganancia perceptiva).
+  - **Invertir Audio (Audio Reverse)**: Reproducción y exportación en reversa de fin a inicio con inversión gráfica del espectrograma (*Spectrum Flip*).
 
 ---
 
-### 4. Atajos de Teclado y Accesibilidad
+### 5. Renderizado de Exportación de Alta Fidelidad (100% Fidelity)
+- **Pipeline de Audio Offline**: Procesamiento de precisión de 32 bits en punto flotante con `OfflineAudioContext` que replica exactamente cada modulación de paneo 8D, filtro, fade y ganancia escuchada en la previsualización.
+- **Codificador WAV 16-bit con Soft-Limiting**: Conversor nativo a PCM de 16 bits con curva de saturación suave `Math.tanh()` para evitar cortes duros a 0 dBFS antes de la conversión final en `FFmpeg`.
+
+---
+
+### 6. Atajos de Teclado y Accesibilidad
 
 | Tecla / Combinación | Acción |
 | :--- | :--- |
@@ -57,88 +88,92 @@
 
 ---
 
-### 5. Historial de Descargas
-- Guardado automático de las sesiones recientes en `localStorage`.
-- Opción para recargar rápidamente videos previos o limpiar el historial.
+### 7. Historial de Sesiones
+- Registro automático de los últimos audios consultados en `localStorage`.
+- Recarga rápida de metadatos o vaciado seguro del historial con un solo clic.
 
 ---
 
-## Estructura del Proyecto
+## 🏗️ Arquitectura del Proyecto
 
 ```
 YT-to-Audio/
 ├── backend/                # Servidor API Flask (Python)
-│   ├── app.py              # Endpoints API (/extract, /progress, /process)
-│   ├── requirements.txt    # Dependencias de Python
-│   ├── temp_audio/         # Caché de audios originales descargados
-│   └── processed_audio/    # Audios procesados listos para descarga
-├── frontend/               # Interfaz Web Estática
-│   ├── index.html          # Estructura principal y componentes modales
+│   ├── app.py              # Endpoints REST (/extract, /progress, /process), limpieza de disco y SSE
+│   ├── requirements.txt    # Dependencias de Python (Flask, yt-dlp, flask-cors)
+│   ├── temp_audio/         # Almacenamiento temporal de pistas originales descargadas
+│   └── processed_audio/    # Almacenamiento temporal de audios procesados listos para descarga
+├── frontend/               # Aplicación Web Frontend (SPA)
+│   ├── index.html          # Estructura semántica, modal de herramientas y componentes UI
 │   ├── css/
-│   │   └── styles.css      # Estilos personalizados, temas oscuros y scrollbars
+│   │   └── styles.css      # Sistema de diseño, animaciones, temas oscuros y scrollbars
 │   └── js/
-│       └── main.js         # Lógica interactiva, WaveSurfer v7 y Web Audio API
+│       └── main.js         # Motor Web Audio API 8D, WaveSurfer v7, listeners y exportación
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
-## Requisitos del Sistema
+## 📋 Requisitos del Sistema
 
-- **Python 3.10+**
-- **FFmpeg** (Debe estar instalado y agregado a las variables de entorno del sistema / `PATH`).
+- **Python 3.10 o superior**
+- **FFmpeg** instalado y accesible globalmente en el `PATH` del sistema.
+- **Navegador Web Moderno** (Google Chrome, Microsoft Edge, Firefox, Brave) con soporte para Web Audio API y HRTF Panning.
 
 ---
 
-## Instalación
+## 🚀 Instalación y Puesta en Marcha
 
-1. Clona el repositorio o descarga los archivos.
-2. Crea e inicializa el entorno virtual de Python dentro de la carpeta `backend`:
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/RakDragon/RakAudio---YouTube-to-AUDIO.git
+cd RakAudio---YouTube-to-AUDIO
+```
 
+### 2. Configurar el Backend (Python)
 ```bash
 cd backend
 python -m venv venv
 ```
 
-3. Activa el entorno virtual e instala las dependencias:
+**Activar el entorno virtual:**
+- **Windows (PowerShell / CMD):**
+  ```powershell
+  venv\Scripts\activate
+  ```
+- **Linux / macOS:**
+  ```bash
+  source venv/bin/activate
+  ```
 
-**En Windows (PowerShell / CMD):**
+**Instalar dependencias:**
 ```bash
-venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**En Linux / macOS:**
+**Iniciar el servidor backend:**
 ```bash
-source venv/bin/activate
-pip install -r requirements.txt
+python app.py
 ```
+> El servidor Flask estará escuchando en `http://localhost:5050`
 
 ---
 
-## Modo de Uso
-
-**1. Iniciar el Backend (Python / Flask):**
-```bash
-cd backend
-python app.py
-```
-*(Escucha en `http://localhost:5050`)*
-
-**2. Iniciar el Frontend (Servidor HTTP estático):**
+### 3. Iniciar el Frontend
+En otra terminal (desde la carpeta raíz del proyecto):
 ```bash
 cd frontend
 python -m http.server 8000
 ```
-*(Disponible en `http://localhost:8000`)*
-
-**3. Abrir en el navegador:**
-Abre `http://localhost:8000` en tu navegador web.
+> El frontend estará disponible en `http://localhost:8000`
 
 ---
 
-## Notas
-- **Puerto del Backend**: `5050`
-- **Puerto del Frontend**: `8000`
-- **Descargas Temporales**: Los archivos en `temp_audio/` y `processed_audio/` se gestionan localmente en el servidor backend.
+### 4. Abrir en el Navegador
+Accede a [http://localhost:8000](http://localhost:8000) desde tu navegador web, pega el enlace de un video de YouTube y comienza a editar.
+
+---
+
+## 🛡️ Licencia y Créditos
+Desarrollado con ❤️ para procesamiento de audio avanzado y espacialización 3D.
