@@ -6,12 +6,10 @@ import threading
 import time
 import traceback
 import uuid
-from collections import deque
 
 import ffmpeg
-
 import yt_dlp
-from flask import Flask, Response, jsonify, request, send_file
+from flask import Flask, Response, after_this_request, jsonify, request, send_file
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -28,21 +26,21 @@ def handle_exception(e):
 
 # ─── Directories ──────────────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
-# realpath used here so path-traversal checks are consistent (no symlink bypass)
 DOWNLOAD_DIR  = os.path.realpath(os.path.join(BASE_DIR, "temp_audio"))
 PROCESSED_DIR = os.path.realpath(os.path.join(BASE_DIR, "processed_audio"))
 os.makedirs(DOWNLOAD_DIR,  exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-# S2: Whitelist of extensions yt-dlp may produce
+# Whitelist of extensions yt-dlp / ffmpeg may produce
 ALLOWED_EXTS = {"webm", "opus", "m4a", "mp3", "ogg", "flac", "wav", "aac"}
 
-# ─── Progress store (thread-safe) ─────────────────────────────────────────────
+# ─── Progress store (thread-safe with automatic expiration) ───────────────────
 progress_store: dict = {}
 progress_lock  = threading.Lock()
 
 def update_progress(client_id: str, data: dict) -> None:
     with progress_lock:
+        data["updated_at"] = time.time()
         progress_store[client_id] = data
 
 def get_progress(client_id: str):
@@ -53,6 +51,14 @@ def get_progress(client_id: str):
 def remove_progress(client_id: str) -> None:
     with progress_lock:
         progress_store.pop(client_id, None)
+
+def purge_expired_progress(max_age_seconds: int = 600) -> None:
+    """Remove progress entries older than max_age_seconds."""
+    now = time.time()
+    with progress_lock:
+        expired = [cid for cid, val in progress_store.items() if now - val.get("updated_at", now) > max_age_seconds]
+        for cid in expired:
+            progress_store.pop(cid, None)
 
 # ─── FFmpeg check ─────────────────────────────────────────────────────────────
 def check_ffmpeg() -> None:
@@ -67,9 +73,12 @@ check_ffmpeg()
 
 # ─── Automatic cleanup ────────────────────────────────────────────────────────
 def cleanup_old_files(max_age_seconds: int = 3600) -> None:
-    """Remove files older than max_age_seconds from temp directories."""
+    """Remove files older than max_age_seconds from temp directories and clean expired progress."""
     now = time.time()
+    purge_expired_progress()
     for folder in (DOWNLOAD_DIR, PROCESSED_DIR):
+        if not os.path.isdir(folder):
+            continue
         for fname in os.listdir(folder):
             fpath = os.path.join(folder, fname)
             try:
@@ -79,7 +88,7 @@ def cleanup_old_files(max_age_seconds: int = 3600) -> None:
                 pass
 
 def cleanup_async() -> None:
-    """A4: Run cleanup in a daemon thread so it never blocks a Flask request."""
+    """Run cleanup in a daemon thread so it never blocks a Flask request."""
     threading.Thread(target=cleanup_old_files, daemon=True).start()
 
 # ─── SSE: real-time progress ───────────────────────────────────────────────────
@@ -110,7 +119,7 @@ def progress():
 def extract():
     client_id = "default"
     try:
-        cleanup_async()  # A4: non-blocking
+        cleanup_async()
 
         body      = request.get_json(force=True, silent=True) or {}
         url       = body.get("url", "").strip()
@@ -124,7 +133,7 @@ def extract():
         })
 
         def ytdl_hook(d):
-            if d["status"] == "downloading":
+            if d.get("status") == "downloading":
                 raw = re.sub(r"\x1b[^m]*m", "", d.get("_percent_str", "0%").replace("%", "")).strip()
                 try:
                     pct = float(raw)
@@ -134,7 +143,7 @@ def extract():
                     })
                 except ValueError:
                     pass
-            elif d["status"] == "finished":
+            elif d.get("status") == "finished":
                 update_progress(client_id, {
                     "status": "downloading", "progress": 100,
                     "msg": "Descarga temporal completada."
@@ -152,9 +161,9 @@ def extract():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
 
-        video_id = info["id"]
-        ext      = info["ext"]
-        raw_date = info.get("upload_date", "")
+        video_id = info.get("id", "unknown")
+        ext      = info.get("ext", "webm")
+        raw_date = info.get("upload_date") or ""
         fmt_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}" if len(raw_date) == 8 else "N/A"
         audio_url = f"{request.host_url.rstrip('/')}/api/audio/{video_id}.{ext}"
 
@@ -165,12 +174,12 @@ def extract():
         return jsonify({
             "id":           video_id,
             "ext":          ext,
-            "title":        info.get("title"),
-            "uploader":     info.get("uploader"),
-            "views":        info.get("view_count"),
+            "title":        info.get("title") or "Sin título",
+            "uploader":     info.get("uploader") or "Desconocido",
+            "views":        info.get("view_count") or 0,
             "uploadDate":   fmt_date,
-            "thumbnailUrl": info.get("thumbnail"),
-            "duration":     info.get("duration"),
+            "thumbnailUrl": info.get("thumbnail") or "",
+            "duration":     int(info.get("duration") or 0),
             "audioUrl":     audio_url,
         })
 
@@ -182,7 +191,11 @@ def extract():
 # ─── Serve downloaded audio ────────────────────────────────────────────────────
 @app.route("/api/audio/<path:filename>")
 def get_audio(filename):
-    # Path-traversal protection
+    # Path-traversal and extension protection
+    file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if file_ext not in ALLOWED_EXTS:
+        return jsonify({"error": "Formato de archivo no permitido"}), 400
+
     resolved = os.path.realpath(os.path.join(DOWNLOAD_DIR, filename))
     safe_root = DOWNLOAD_DIR + os.sep
     if not (resolved.startswith(safe_root) or resolved == DOWNLOAD_DIR):
@@ -191,27 +204,32 @@ def get_audio(filename):
         return send_file(resolved)
     return jsonify({"error": "Archivo no encontrado"}), 404
 
+# ─── Process and export audio ──────────────────────────────────────────────────
 @app.route("/api/process", methods=["POST"])
 def process_audio():
     client_id  = request.form.get("client_id", "default")
     video_id   = request.form.get("id", "")
-    out_format = request.form.get("format", "mp3")
-    quality    = request.form.get("quality", "320k")
+    out_format = request.form.get("format", "mp3").lower().strip()
+    quality    = request.form.get("quality", "320k").strip()
 
     if not re.fullmatch(r"[a-zA-Z0-9_\-]+", video_id or ""):
         return jsonify({"error": "ID de video inválido"}), 400
 
-    if 'audioFile' not in request.files:
+    if out_format not in ALLOWED_EXTS:
+        return jsonify({"error": f"Formato '{out_format}' no soportado"}), 400
+
+    if "audioFile" not in request.files:
         return jsonify({"error": "No se recibió el archivo de audio renderizado"}), 400
         
-    file = request.files['audioFile']
-    if file.filename == '':
-        return jsonify({"error": "Archivo vacío"}), 400
+    file = request.files["audioFile"]
+    if not file or file.filename == "":
+        return jsonify({"error": "Archivo de audio vacío"}), 400
 
-    input_path = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}_rendered.wav")
+    unique_id = uuid.uuid4().hex
+    input_path = os.path.join(PROCESSED_DIR, f"{unique_id}_rendered.wav")
+    output_path = os.path.join(PROCESSED_DIR, f"{unique_id}.{out_format}")
+
     file.save(input_path)
-
-    output_path = os.path.join(PROCESSED_DIR, f"{uuid.uuid4().hex}.{out_format}")
 
     update_progress(client_id, {
         "status": "processing", "progress": 0,
@@ -222,12 +240,19 @@ def process_audio():
         stream = ffmpeg.input(input_path)
         
         codec_kwargs: dict = {}
-        if out_format in ("mp3", "m4a"):
+        if out_format in ("mp3", "m4a", "aac", "opus", "ogg"):
             codec_kwargs["audio_bitrate"] = quality
-            if out_format == "m4a":
+            if out_format in ("m4a", "aac"):
                 codec_kwargs["acodec"] = "aac"
-        elif out_format == "wav":
-            codec_kwargs["acodec"] = "pcm_s16le"
+            elif out_format == "opus":
+                codec_kwargs["acodec"] = "libopus"
+            elif out_format == "mp3":
+                codec_kwargs["acodec"] = "libmp3lame"
+        elif out_format in ("wav", "flac"):
+            if out_format == "wav":
+                codec_kwargs["acodec"] = "pcm_s16le"
+            elif out_format == "flac":
+                codec_kwargs["acodec"] = "flac"
 
         # Overwrite output
         stream = ffmpeg.output(stream, output_path, **codec_kwargs, y=None)
@@ -235,10 +260,23 @@ def process_audio():
         update_progress(client_id, {"status": "processing", "progress": 50, "msg": "Generando archivo final y aplicando metadatos..."})
         ffmpeg.run(stream, capture_stdout=True, capture_stderr=True)
 
-        # Cleanup
+        # Remove input WAV
         if os.path.exists(input_path):
             try: os.remove(input_path)
-            except: pass
+            except OSError: pass
+
+        # Automatically clean up output file after sending to client
+        @after_this_request
+        def remove_temp_output(response):
+            def delayed_remove():
+                time.sleep(2.0)
+                try:
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                except OSError:
+                    pass
+            threading.Thread(target=delayed_remove, daemon=True).start()
+            return response
             
         update_progress(client_id, {"status": "done", "progress": 100, "msg": "¡Audio exportado con éxito!"})
         return send_file(output_path, as_attachment=True, download_name=f"audio_editado.{out_format}")
@@ -246,11 +284,20 @@ def process_audio():
     except ffmpeg.Error as e:
         traceback.print_exc()
         if e.stderr:
-            print("FFMPEG STDERR:", e.stderr.decode("utf-8"))
+            print("FFMPEG STDERR:", e.stderr.decode("utf-8", errors="ignore"))
+        # Cleanup files on error
+        for p in (input_path, output_path):
+            if os.path.exists(p):
+                try: os.remove(p)
+                except OSError: pass
         update_progress(client_id, {"status": "error", "progress": 0, "msg": "Error en procesamiento de FFmpeg."})
         return jsonify({"error": "Error interno de FFmpeg"}), 500
     except Exception as e:
         traceback.print_exc()
+        for p in (input_path, output_path):
+            if os.path.exists(p):
+                try: os.remove(p)
+                except OSError: pass
         update_progress(client_id, {"status": "error", "progress": 0, "msg": str(e)})
         return jsonify({"error": str(e)}), 500
 

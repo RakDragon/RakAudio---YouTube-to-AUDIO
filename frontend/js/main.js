@@ -16,7 +16,9 @@ let trimStartTime      = 0;
 let trimEndTime        = 0;
 let activeMode         = 'playhead';
 let isEditedViewActive = false;
+let isSwitchingView    = false;
 let globalVolValue     = 1.0;
+let processResetTimer  = null;
 
 // WaveSurfer instances
 let wsGlobal     = null;
@@ -29,15 +31,13 @@ let rafGlobal = null;
 let rafTrim   = null;
 
 // Promise for reversed-audio preparation — awaited by toggleAudioReverseLive
-// instead of polling with setInterval
 let reversedAudioUrlPromise = null;
 let reversedAudioUrl        = null;
-let auditoriumAudioUrl      = null;
 
 let lastAppliedState = {
     start: 0, end: 0, fadeIn: 0, fadeOut: 0,
     adjustVol: false, volLevel: 1.0, tempo: 1.0,
-    normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
+    normalizeVol: false, pitch: 0, reverse: false,
     eight_d: false, eight_d_dir: 'left', eight_d_pattern: 'circle',
     eight_d_speed: 8, eight_d_radius: 2.0,
 };
@@ -83,8 +83,6 @@ const pitchSlider          = document.getElementById('pitchSlider');
 const lblPitchValue        = document.getElementById('lblPitchValue');
 const chkNormalizeVolModal = document.getElementById('chkNormalizeVolModal');
 const chkReverseAudio      = document.getElementById('chkReverseAudio');
-const chkAuditorium        = document.getElementById('chkAuditorium');
-const auditoriumSpinner    = document.getElementById('auditoriumSpinner');
 
 const chk8D                = document.getElementById('chk8D');
 const controls8D           = document.getElementById('controls8D');
@@ -330,7 +328,6 @@ function readEditorState() {
         normalizeVol: chkNormalizeVolModal      ? chkNormalizeVolModal.checked : false,
         pitch:        parseInt(pitchSlider      ? pitchSlider.value        : 0, 10),
         reverse:      chkReverseAudio           ? chkReverseAudio.checked  : false,
-        auditorium:   chkAuditorium             ? chkAuditorium.checked    : false,
         eight_d:       chk8D?.checked ?? false,
         eight_d_dir:   sel8DDir?.value ?? 'left',
         eight_d_pattern: sel8DPattern?.value ?? 'circle',
@@ -348,7 +345,6 @@ function resetEditorControls() {
     if (pitchSlider)  { pitchSlider.value  = 0;   if (lblPitchValue) lblPitchValue.textContent = '0 semitonos'; }
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = false;
     if (chkReverseAudio)      chkReverseAudio.checked      = false;
-    if (chkAuditorium)        chkAuditorium.checked        = false;
     
     if (chk8D) chk8D.checked = false;
     if (card8D) card8D.classList.replace('border-[#FF422E]', 'border-[#444]');
@@ -388,7 +384,6 @@ function checkIfStateChanged() {
         cur.normalizeVol === (prev.normalizeVol ?? false) &&
         cur.pitch   === (prev.pitch   ?? 0)     &&
         cur.reverse === (prev.reverse ?? false) &&
-        cur.auditorium === (prev.auditorium ?? false) &&
         cur.eight_d === (prev.eight_d ?? false) &&
         cur.eight_d_dir === (prev.eight_d_dir ?? 'left') &&
         cur.eight_d_pattern === (prev.eight_d_pattern ?? 'circle') &&
@@ -438,7 +433,6 @@ function syncUIWithAppliedState() {
         if (lblPitchValue) lblPitchValue.textContent = (lastAppliedState.pitch ?? 0) + ' semitonos';
     }
     if (chkReverseAudio) chkReverseAudio.checked = !!lastAppliedState.reverse;
-    if (chkAuditorium) chkAuditorium.checked = !!lastAppliedState.auditorium;
     if (chkNormalizeVolModal) chkNormalizeVolModal.checked = !!lastAppliedState.normalizeVol;
     
     if (chkAdjustVol) chkAdjustVol.checked = !!lastAppliedState.adjustVol;
@@ -561,6 +555,23 @@ function createImpulseResponse(ctx, duration = 0.5, decay = 3.0) {
     return impulse;
 }
 
+/** Cleanly destroy Web Audio nodes and animation frame associated with 8D effect. */
+function destroy8D(ws) {
+    if (!ws || !ws._8d) return;
+    if (typeof ws._8d === 'object') {
+        if (ws._8d.raf) cancelAnimationFrame(ws._8d.raf);
+        try { ws._8d.source?.disconnect(); } catch {}
+        try { ws._8d.panner?.disconnect(); } catch {}
+        try { ws._8d.rearFilter?.disconnect(); } catch {}
+        try { ws._8d.rearGain?.disconnect(); } catch {}
+        try { ws._8d.convolver?.disconnect(); } catch {}
+        try { ws._8d.verbGain?.disconnect(); } catch {}
+        try { ws._8d.outGain?.disconnect(); } catch {}
+        try { ws._8d.ctx?.close().catch(() => {}); } catch {}
+    }
+    ws._8d = null;
+}
+
 /** Applies Web Audio API nodes for live 8D HRTF panning, rear head-shadow filtering, and spatial ambience. */
 function apply8D(ws, isGlobalEdited) {
     if (!ws) return;
@@ -625,7 +636,7 @@ function apply8D(ws, isGlobalEdited) {
             
             // Animation loop for smooth 360 rotation & spatial filtering
             const updatePan = () => {
-                if (ws._8d.isActive && !audioEl.paused) {
+                if (ws._8d && ws._8d.isActive && !audioEl.paused) {
                     const isTrimWs = (ws === wsTrim);
                     const speed = isTrimWs
                         ? (slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8)
@@ -679,8 +690,8 @@ function apply8D(ws, isGlobalEdited) {
                     if (ws._8d.rearGain) ws._8d.rearGain.gain.setTargetAtTime(distGain, now, 0.04);
                     
                     if (radarCanvas) {
-                        const ctx = radarCanvas.getContext('2d');
-                        ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
+                        const ctxRadar = radarCanvas.getContext('2d');
+                        ctxRadar.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
                         const cx = radarCanvas.width / 2;
                         const cy = radarCanvas.height / 2;
                         
@@ -699,20 +710,22 @@ function apply8D(ws, isGlobalEdited) {
                             visY = cy + Math.cos(angle) * rVis;
                         }
                         
-                        ctx.beginPath();
-                        ctx.arc(visX, visY, 6, 0, 2 * Math.PI);
-                        ctx.fillStyle = '#FF422E';
-                        ctx.shadowBlur = 10;
-                        ctx.shadowColor = '#FF422E';
-                        ctx.fill();
-                        ctx.fill(); // double fill for strong shadow
-                        ctx.shadowBlur = 0;
+                        ctxRadar.beginPath();
+                        ctxRadar.arc(visX, visY, 6, 0, 2 * Math.PI);
+                        ctxRadar.fillStyle = '#FF422E';
+                        ctxRadar.shadowBlur = 10;
+                        ctxRadar.shadowColor = '#FF422E';
+                        ctxRadar.fill();
+                        ctxRadar.fill(); // double fill for strong shadow
+                        ctxRadar.shadowBlur = 0;
                     }
-                } else if (!ws._8d.isActive && radarCanvas) {
-                    const ctx = radarCanvas.getContext('2d');
-                    ctx.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
+                } else if (ws._8d && !ws._8d.isActive && radarCanvas) {
+                    const ctxRadar = radarCanvas.getContext('2d');
+                    ctxRadar.clearRect(0, 0, radarCanvas.width, radarCanvas.height);
                 }
-                ws._8d.raf = requestAnimationFrame(updatePan);
+                if (ws._8d && typeof ws._8d === 'object') {
+                    ws._8d.raf = requestAnimationFrame(updatePan);
+                }
             };
             ws._8d.raf = requestAnimationFrame(updatePan);
             
@@ -817,8 +830,7 @@ function setGlobalView(edited) {
     isEditedViewActive = edited;
 
     const isReverse = chkReverseAudio?.checked ?? false;
-    const isAuditorium = chkAuditorium?.checked ?? false;
-    let targetUrl   = isAuditorium && auditoriumAudioUrl ? auditoriumAudioUrl : audioUrlGlobal;
+    let targetUrl   = (isReverse && reversedAudioUrl) ? reversedAudioUrl : audioUrlGlobal;
 
     if (edited) {
         btnViewEdited.classList.replace('text-gray-400', 'text-white');
@@ -835,7 +847,6 @@ function setGlobalView(edited) {
         lblVolGlobal.textContent = `${Math.round(editVol * 100)}%`;
 
         renderVisualFades(waveformContainerEl, true);
-        if (isReverse && reversedAudioUrl) targetUrl = reversedAudioUrl;
     } else {
         btnViewOriginal.classList.replace('text-gray-400', 'text-white');
         btnViewOriginal.classList.replace('hover:text-white', 'bg-[#FF422E]');
@@ -849,13 +860,14 @@ function setGlobalView(edited) {
         lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
 
         waveformContainerEl.querySelectorAll('.visual-fx').forEach(el => el.remove());
+        targetUrl = audioUrlGlobal;
     }
 
     if (wsGlobal) {
-        window.isSwitchingView = true;
+        isSwitchingView = true;
         const wasPlaying  = wsGlobal.isPlaying();
         const curTime     = wsGlobal.getCurrentTime();
-        const currentSrc  = wsGlobal.getMediaElement().src;
+        const currentSrc  = wsGlobal.getMediaElement()?.src || '';
         const needsSwitch = !currentSrc.endsWith(targetUrl) && currentSrc !== targetUrl;
 
         if (btnPlayPause) {
@@ -865,7 +877,7 @@ function setGlobalView(edited) {
         }
 
         const finalize = () => {
-            window.isSwitchingView = false;
+            isSwitchingView = false;
             if (btnPlayPause) {
                 btnPlayPause.disabled = false;
                 btnPlayPause.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -911,17 +923,17 @@ btnViewEdited.addEventListener('click',   () => setGlobalView(true));
 
 // ── Format selector ───────────────────────────────────────────────────────────
 outFormat.addEventListener('change', (e) => {
-    const isWav = e.target.value === 'wav';
-    outQuality.disabled = isWav;
-    outQuality.classList.toggle('opacity-50',        isWav);
-    outQuality.classList.toggle('cursor-not-allowed', isWav);
+    const noBitrate = ['wav', 'flac'].includes(e.target.value);
+    outQuality.disabled = noBitrate;
+    outQuality.classList.toggle('opacity-50',         noBitrate);
+    outQuality.classList.toggle('cursor-not-allowed', noBitrate);
 });
 
 // ── WaveSurfer — main waveform ────────────────────────────────────────────────
 function initWaveSurfer() {
     // Cancel pending rAF before destroying old instance to prevent stale callbacks
     if (rafGlobal) { cancelAnimationFrame(rafGlobal); rafGlobal = null; }
-    if (wsGlobal)  wsGlobal.destroy();
+    if (wsGlobal)  { destroy8D(wsGlobal); wsGlobal.destroy(); }
 
     showWaveformLoading();
 
@@ -933,8 +945,8 @@ function initWaveSurfer() {
         plugins:   [WaveSurfer.Hover.create(HOVER_OPTS)],
     });
 
-    wsGlobal.on('play',  () => { if (!window.isSwitchingView) btnPlayPause.textContent = 'Pause'; });
-    wsGlobal.on('pause', () => { if (!window.isSwitchingView) btnPlayPause.textContent = 'Play';  });
+    wsGlobal.on('play',  () => { if (!isSwitchingView) btnPlayPause.textContent = 'Pause'; });
+    wsGlobal.on('pause', () => { if (!isSwitchingView) btnPlayPause.textContent = 'Play';  });
 
     wsGlobal.on('ready', () => {
         hideWaveformLoading();
@@ -991,11 +1003,11 @@ btnPlayPause.addEventListener('click', () => {
 
 document.getElementById('btnStart').addEventListener('click', () => {
     if (!wsGlobal) return;
-    wsGlobal.seekTo(isEditedViewActive ? (trimStartTime / videoDuration) : 0);
+    wsGlobal.seekTo(isEditedViewActive ? (trimStartTime / (videoDuration || 1)) : 0);
 });
 document.getElementById('btnEnd').addEventListener('click', () => {
     if (!wsGlobal) return;
-    wsGlobal.seekTo(isEditedViewActive ? (trimEndTime / videoDuration) : 1);
+    wsGlobal.seekTo(isEditedViewActive ? (trimEndTime / (videoDuration || 1)) : 1);
 });
 document.getElementById('btnMinus10').addEventListener('click', () => { if (wsGlobal) wsGlobal.skip(-10); });
 document.getElementById('btnMinus5').addEventListener('click',  () => { if (wsGlobal) wsGlobal.skip(-5);  });
@@ -1020,7 +1032,7 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
     viewToggle.classList.add('hidden');
     setGlobalView(false);
 
-    if (wsTrim) { wsTrim.destroy(); wsTrim = null; trimRegion = null; }
+    if (wsTrim) { destroy8D(wsTrim); wsTrim.destroy(); wsTrim = null; trimRegion = null; }
 
     currentEvtSource = new EventSource(`${API_BASE}/api/progress?client_id=${clientId}`);
     currentEvtSource.onmessage = (e) => {
@@ -1047,32 +1059,31 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
         // toggleAudioReverseLive can await it without polling.
         if (reversedAudioUrl) { URL.revokeObjectURL(reversedAudioUrl); reversedAudioUrl = null; }
         reversedAudioUrlPromise = prepareReversedAudioUrl(data.audioUrl);
-        auditoriumAudioUrl = null; // reset for new video
 
-        metaTitle.textContent    = data.title;
-        metaChannel.textContent  = data.uploader;
-        metaViews.textContent    = parseInt(data.views, 10).toLocaleString(); // E2: radix
-        metaDate.textContent     = data.uploadDate;
-        metaThumb.src            = data.thumbnailUrl;
+        metaTitle.textContent    = data.title || 'Sin título';
+        metaChannel.textContent  = data.uploader || 'Desconocido';
+        metaViews.textContent    = (data.views != null && !isNaN(data.views)) ? parseInt(data.views, 10).toLocaleString() : 'N/A';
+        metaDate.textContent     = data.uploadDate || 'N/A';
+        metaThumb.src            = data.thumbnailUrl || '';
         
         const metadataBg = document.getElementById('metadataBg');
-        if (metadataBg) metadataBg.style.backgroundImage = `url('${data.thumbnailUrl}')`;
+        if (metadataBg) metadataBg.style.backgroundImage = `url('${data.thumbnailUrl || ''}')`;
 
         metaDuration.textContent = formatTime(data.duration);
 
-        videoDuration = data.duration;
+        videoDuration = Number(data.duration) || 0;
         trimStartTime = 0;
         trimEndTime   = videoDuration;
 
         lastAppliedState = {
             start: 0, end: round2(videoDuration),
             fadeIn: 0, fadeOut: 0, adjustVol: false, volLevel: 1.0,
-            tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
+            tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false,
             eight_d: false, eight_d_dir: 'left', eight_d_pattern: 'circle',
             eight_d_speed: 8, eight_d_radius: 2.0,
         };
 
-        resetEditorControls(); // M5: extracted helper
+        resetEditorControls();
 
         saveToHistory({
             id: data.id, title: data.title, uploader: data.uploader,
@@ -1118,7 +1129,6 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
             plugins:    [wsRegions, WaveSurfer.Hover.create(HOVER_OPTS)],
         });
 
-        // M6: uses cached btnPlayTrim / lblPlayTrim refs
         wsTrim.on('play',  () => { if (lblPlayTrim) lblPlayTrim.textContent = 'Pausar Selección'; });
         wsTrim.on('pause', () => {
             if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
@@ -1137,7 +1147,7 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
             inpEnd.value   = trimEndTime.toFixed(2);
             lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
 
-            renderVisualFades(waveformTrimContainerEl, false); // A2: element ref
+            renderVisualFades(waveformTrimContainerEl, false);
             applyLiveAudioMath(wsTrim, false);
             checkIfStateChanged();
 
@@ -1150,7 +1160,7 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
                 else if (cs < snap)                                { cs = 0;                      trimRegion.setOptions({ start: cs }); }
 
                 if (Math.abs(ce - lastAppliedState.end) < snap)   { ce = lastAppliedState.end;   trimRegion.setOptions({ end: ce }); }
-                else if (Math.abs(ce - videoDuration) < snap)      { ce = videoDuration;           trimRegion.setOptions({ end: ce }); }
+                else if (videoDuration > 0 && Math.abs(ce - videoDuration) < snap) { ce = videoDuration; trimRegion.setOptions({ end: ce }); }
 
                 if (cs !== trimStartTime && ce === trimEndTime) setActiveMode('left');
                 else if (ce !== trimEndTime && cs === trimStartTime) setActiveMode('right');
@@ -1160,7 +1170,7 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
 
                 inpStart.value = trimStartTime.toFixed(2);
                 inpEnd.value   = trimEndTime.toFixed(2);
-                lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+                lblTrimDuration.textContent = Math.max(0, trimEndTime - trimStartTime).toFixed(2);
 
                 renderVisualFades(waveformTrimContainerEl, false);
                 applyLiveAudioMath(wsTrim, false);
@@ -1177,8 +1187,6 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
             applyLiveAudioMath(wsTrim, false);
         });
 
-        // rAF throttle: batch audioprocess to 1 visual update per frame.
-        // A3: updateTrimProgressUI is now module-scoped (no closure over stale values).
         wsTrim.on('audioprocess', () => {
             if (rafTrim) return;
             rafTrim = requestAnimationFrame(() => { rafTrim = null; updateTrimProgressUI(); });
@@ -1398,49 +1406,6 @@ if (radarCanvas) {
     });
 }
 
-if (chkAuditorium) {
-    chkAuditorium.addEventListener('change', async (e) => {
-        const isChecked = e.target.checked;
-        chkAuditorium.disabled = true;
-        if (auditoriumSpinner) auditoriumSpinner.classList.remove('hidden');
-
-        try {
-            if (isChecked) {
-                if (!auditoriumAudioUrl) {
-                    const res = await fetch(`${API_BASE}/api/process_auditorium`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: currentVideoId, ext: currentExt })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
-                    auditoriumAudioUrl = data.audioUrl;
-                }
-                
-                const curTime = wsGlobal ? wsGlobal.getCurrentTime() : 0;
-                if (wsGlobal) await wsGlobal.load(auditoriumAudioUrl);
-                if (wsTrim) await wsTrim.load(auditoriumAudioUrl);
-                if (wsGlobal) wsGlobal.setTime(curTime);
-                if (wsTrim) wsTrim.setTime(curTime);
-            } else {
-                let urlToLoad = chkReverseAudio?.checked && reversedAudioUrl ? reversedAudioUrl : audioUrlGlobal;
-                const curTime = wsGlobal ? wsGlobal.getCurrentTime() : 0;
-                if (wsGlobal) await wsGlobal.load(urlToLoad);
-                if (wsTrim) await wsTrim.load(urlToLoad);
-                if (wsGlobal) wsGlobal.setTime(curTime);
-                if (wsTrim) wsTrim.setTime(curTime);
-            }
-        } catch (err) {
-            console.error("Error en Auditorium:", err);
-            chkAuditorium.checked = !isChecked; // rollback
-        } finally {
-            chkAuditorium.disabled = false;
-            if (auditoriumSpinner) auditoriumSpinner.classList.add('hidden');
-            checkIfStateChanged();
-        }
-    });
-}
-
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 const keysPressed = new Set();
 
@@ -1498,7 +1463,7 @@ function updateKeyboardUI() {
 }
 
 window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
     keysPressed.add(e.code);
     updateKeyboardUI();
@@ -1545,7 +1510,7 @@ window.addEventListener('keydown', (e) => {
             const v = Math.max(0, globalVolValue - 0.05);
             globalVolValue = v;
             volSlider.value = v;
-            lblVolGlobal.textContent = `${Math.round(v * 100)}%`;
+            lblVolGlobal.textContent = `${Math.round(globalVolValue * 100)}%`;
             wsGlobal.setVolume(v);
         }
 
@@ -1559,7 +1524,7 @@ window.addEventListener('keydown', (e) => {
                 trimStartTime = Math.max(0, Math.min(trimStartTime + step * dir, trimEndTime - 0.01));
                 trimRegion.setOptions({ start: trimStartTime });
                 inpStart.value = trimStartTime.toFixed(2);
-                lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+                lblTrimDuration.textContent = Math.max(0, trimEndTime - trimStartTime).toFixed(2);
                 renderVisualFades(waveformTrimContainerEl, false);
                 applyLiveAudioMath(wsTrim, false);
                 checkIfStateChanged();
@@ -1568,7 +1533,7 @@ window.addEventListener('keydown', (e) => {
                 trimEndTime = Math.min(videoDuration, Math.max(trimEndTime + step * dir, trimStartTime + 0.01));
                 trimRegion.setOptions({ end: trimEndTime });
                 inpEnd.value = trimEndTime.toFixed(2);
-                lblTrimDuration.textContent = (trimEndTime - trimStartTime).toFixed(2);
+                lblTrimDuration.textContent = Math.max(0, trimEndTime - trimStartTime).toFixed(2);
                 renderVisualFades(waveformTrimContainerEl, false);
                 applyLiveAudioMath(wsTrim, false);
                 checkIfStateChanged();
@@ -1598,6 +1563,11 @@ btnProcess.addEventListener('click', async () => {
     const quality  = outQuality.value;
     const spanText = btnProcess.querySelector('span');
 
+    if (processResetTimer) {
+        clearTimeout(processResetTimer);
+        processResetTimer = null;
+    }
+
     btnProcess.disabled = true;
     btnProcess.classList.remove('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
     btnProcess.classList.add('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
@@ -1620,13 +1590,17 @@ btnProcess.addEventListener('click', async () => {
     };
 
     /** Reset the process button to its default state after a delay. */
-    const resetBtn = (delay) => setTimeout(() => {
-        btnProcess.disabled = false;
-        btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
-        btnProcess.classList.add('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
-        spanText.textContent = 'Procesar y Descargar Audio';
-        btnProcess.style.setProperty('--progress', '0%');
-    }, delay);
+    const resetBtn = (delay) => {
+        if (processResetTimer) clearTimeout(processResetTimer);
+        processResetTimer = setTimeout(() => {
+            btnProcess.disabled = false;
+            btnProcess.classList.remove('bg-[#1f1f1f]', 'border', 'border-[#FF422E]');
+            btnProcess.classList.add('bg-[#FF422E]', 'hover:bg-[#d43726]', 'shadow-[0_0_15px_rgba(255,66,46,0.4)]');
+            spanText.textContent = 'Procesar y Descargar Audio';
+            btnProcess.style.setProperty('--progress', '0%');
+            processResetTimer = null;
+        }, delay);
+    };
 
     try {
         spanText.textContent = 'Renderizando audio (Alta Fidelidad)...';
@@ -1729,9 +1703,6 @@ async function toggleAudioReverseLive() {
     if (wsGlobal && isEditedViewActive) { wsGlobal.once('decode', () => applyReverseState(wsGlobal, true));  wsGlobal.load(targetUrl); }
 }
 
-// ── Tab navigation ────────────────────────────────────────────────────────────
-// The tab navigation has been removed in favor of a unified CSS Grid layout.
-
 // ── History controls ──────────────────────────────────────────────────────────
 const btnClearHistory = document.getElementById('btnClearHistory');
 if (btnClearHistory) btnClearHistory.addEventListener('click', clearHistory);
@@ -1742,8 +1713,12 @@ renderHistory();
 
 async function renderOfflineAudio() {
     let urlToRender = audioUrlGlobal;
-    if (lastAppliedState?.auditorium && auditoriumAudioUrl) urlToRender = auditoriumAudioUrl;
-    else if (lastAppliedState?.reverse && reversedAudioUrl) urlToRender = reversedAudioUrl;
+    if (lastAppliedState?.reverse) {
+        if (!reversedAudioUrl && reversedAudioUrlPromise) {
+            await reversedAudioUrlPromise;
+        }
+        if (reversedAudioUrl) urlToRender = reversedAudioUrl;
+    }
 
     const arrayBuf = await (await fetch(urlToRender)).arrayBuffer();
     const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
