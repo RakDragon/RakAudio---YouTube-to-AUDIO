@@ -38,6 +38,8 @@ let lastAppliedState = {
     start: 0, end: 0, fadeIn: 0, fadeOut: 0,
     adjustVol: false, volLevel: 1.0, tempo: 1.0,
     normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
+    eight_d: false, eight_d_dir: 'left', eight_d_pattern: 'circle',
+    eight_d_speed: 8, eight_d_radius: 2.0,
 };
 
 // ── Cached DOM references ─────────────────────────────────────────────────────
@@ -373,23 +375,25 @@ function checkIfStateChanged() {
     if (!btnApplyTrim) return;
 
     const cur  = readEditorState();
-    const prev = lastAppliedState;
+    const prev = lastAppliedState || {};
 
     const isSame =
-        Math.abs(cur.start   - prev.start)   < 0.01 &&
-        Math.abs(cur.end     - prev.end)     < 0.01 &&
-        Math.abs(cur.fadeIn  - prev.fadeIn)  < 0.01 &&
-        Math.abs(cur.fadeOut - prev.fadeOut) < 0.01 &&
-        cur.adjustVol === prev.adjustVol &&
-        (!cur.adjustVol || Math.abs(cur.volLevel - prev.volLevel) < 0.01) &&
-        Math.abs(cur.tempo - (prev.tempo || 1.0)) < 0.01 &&
-        cur.normalizeVol === (prev.normalizeVol || false) &&
-        cur.pitch   === (prev.pitch   || 0)     &&
-        cur.reverse === (prev.reverse || false) &&
-        cur.auditorium === (prev.auditorium || false) &&
-        cur.eight_d === (prev.eight_d || false) &&
-        cur.eight_d_dir === (prev.eight_d_dir || 'left') &&
-        Math.abs(cur.eight_d_speed - (prev.eight_d_speed || 8)) < 0.01;
+        Math.abs(cur.start   - (prev.start   ?? 0))   < 0.01 &&
+        Math.abs(cur.end     - (prev.end     ?? 0))   < 0.01 &&
+        Math.abs(cur.fadeIn  - (prev.fadeIn  ?? 0))  < 0.01 &&
+        Math.abs(cur.fadeOut - (prev.fadeOut ?? 0)) < 0.01 &&
+        cur.adjustVol === (prev.adjustVol ?? false) &&
+        (!cur.adjustVol || Math.abs(cur.volLevel - (prev.volLevel ?? 1.0)) < 0.01) &&
+        Math.abs(cur.tempo - (prev.tempo ?? 1.0)) < 0.01 &&
+        cur.normalizeVol === (prev.normalizeVol ?? false) &&
+        cur.pitch   === (prev.pitch   ?? 0)     &&
+        cur.reverse === (prev.reverse ?? false) &&
+        cur.auditorium === (prev.auditorium ?? false) &&
+        cur.eight_d === (prev.eight_d ?? false) &&
+        cur.eight_d_dir === (prev.eight_d_dir ?? 'left') &&
+        cur.eight_d_pattern === (prev.eight_d_pattern ?? 'circle') &&
+        Math.abs(cur.eight_d_speed - (prev.eight_d_speed ?? 8)) < 0.01 &&
+        Math.abs(cur.eight_d_radius - (prev.eight_d_radius ?? 2.0)) < 0.01;
 
     btnApplyTrim.disabled = isSame;
     btnApplyTrim.classList.toggle('opacity-40',          isSame);
@@ -407,6 +411,55 @@ function checkIfStateChanged() {
     
     const fadeActive = (cur.fadeIn > 0.01 || cur.fadeOut > 0.01);
     if (cardFade)      cardFade.classList.replace(fadeActive ? 'border-[#444]' : 'border-[#FF422E]', fadeActive ? 'border-[#FF422E]' : 'border-[#444]');
+}
+
+/** Synchronizes all modal inputs and state indicators with lastAppliedState. */
+function syncUIWithAppliedState() {
+    if (!lastAppliedState) return;
+
+    if (chk8D) chk8D.checked = !!lastAppliedState.eight_d;
+    if (sel8DDir) sel8DDir.value = lastAppliedState.eight_d_dir || 'left';
+    if (sel8DPattern) sel8DPattern.value = lastAppliedState.eight_d_pattern || 'circle';
+    if (slide8DSpeed) { 
+        slide8DSpeed.value = lastAppliedState.eight_d_speed ?? 8; 
+        if (lbl8DSpeed) lbl8DSpeed.textContent = (lastAppliedState.eight_d_speed ?? 8) + 's';
+    }
+    if (slide8DRadius) {
+        slide8DRadius.value = lastAppliedState.eight_d_radius ?? 2.0;
+        if (lbl8DRadius) lbl8DRadius.textContent = parseFloat(lastAppliedState.eight_d_radius ?? 2.0).toFixed(1) + 'm';
+    }
+
+    if (tempoSlider) {
+        tempoSlider.value = lastAppliedState.tempo ?? 1.0;
+        if (lblTempoValue) lblTempoValue.textContent = (lastAppliedState.tempo ?? 1.0).toFixed(2) + 'x';
+    }
+    if (pitchSlider) {
+        pitchSlider.value = lastAppliedState.pitch ?? 0;
+        if (lblPitchValue) lblPitchValue.textContent = (lastAppliedState.pitch ?? 0) + ' semitonos';
+    }
+    if (chkReverseAudio) chkReverseAudio.checked = !!lastAppliedState.reverse;
+    if (chkAuditorium) chkAuditorium.checked = !!lastAppliedState.auditorium;
+    if (chkNormalizeVolModal) chkNormalizeVolModal.checked = !!lastAppliedState.normalizeVol;
+    
+    if (chkAdjustVol) chkAdjustVol.checked = !!lastAppliedState.adjustVol;
+    if (volAdjustSlider) {
+        volAdjustSlider.value = lastAppliedState.volLevel ?? 1.0;
+        if (lblVolAdjust) {
+            lblVolAdjust.textContent = Math.round((lastAppliedState.volLevel ?? 1.0) * 100) + '%';
+            lblVolAdjust.classList.toggle('opacity-50', !lastAppliedState.adjustVol);
+        }
+    }
+    
+    if (fInG) { fInG.value = lastAppliedState.fadeIn ?? 0; if (lblFadeInG) lblFadeInG.textContent = (lastAppliedState.fadeIn ?? 0) + 's'; }
+    if (fOutG) { fOutG.value = lastAppliedState.fadeOut ?? 0; if (lblFadeOutG) lblFadeOutG.textContent = (lastAppliedState.fadeOut ?? 0) + 's'; }
+    
+    trimStartTime = lastAppliedState.start;
+    trimEndTime = lastAppliedState.end;
+    if (inpStart) inpStart.value = trimStartTime.toFixed(2);
+    if (inpEnd) inpEnd.value = trimEndTime.toFixed(2);
+    if (trimRegion) trimRegion.setOptions({ start: trimStartTime, end: trimEndTime });
+    
+    checkIfStateChanged();
 }
 
 // ── Time display ──────────────────────────────────────────────────────────────
@@ -492,14 +545,32 @@ function applyLiveAudioMath(ws, isGlobalEdited) {
     apply8D(ws, isGlobalEdited);
 }
 
-/** Applies Web Audio API nodes for live 8D HRTF panning effect. */
+/** Generate synthetic binaural room impulse response for realistic spatial 3D presence. */
+function createImpulseResponse(ctx, duration = 0.5, decay = 3.0) {
+    const sampleRate = ctx.sampleRate;
+    const length = Math.max(1, Math.floor(sampleRate * duration));
+    const impulse = ctx.createBuffer(2, length, sampleRate);
+    const left = impulse.getChannelData(0);
+    const right = impulse.getChannelData(1);
+    for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        const env = Math.exp(-decay * t);
+        left[i] = (Math.random() * 2 - 1) * env;
+        right[i] = (Math.random() * 2 - 1) * env;
+    }
+    return impulse;
+}
+
+/** Applies Web Audio API nodes for live 8D HRTF panning, rear head-shadow filtering, and spatial ambience. */
 function apply8D(ws, isGlobalEdited) {
     if (!ws) return;
     const audioEl = ws.getMediaElement();
     if (!audioEl) return;
 
-    // Only apply if we are looking at the edited view (or it's the trim preview)
-    const shouldApply = (ws === wsTrim || isGlobalEdited) && chk8D && chk8D.checked;
+    // Determine whether 8D should be active
+    const shouldApply = (ws === wsTrim)
+        ? (chk8D && chk8D.checked)
+        : (isGlobalEdited && (lastAppliedState?.eight_d ?? (chk8D && chk8D.checked)));
 
     if (!ws._8d) {
         if (!shouldApply) return; // Don't build graph if not needed yet
@@ -511,25 +582,63 @@ function apply8D(ws, isGlobalEdited) {
             const panner = ctx.createPanner();
             panner.panningModel = 'HRTF';
             panner.distanceModel = 'inverse';
-            panner.refDistance = 1;
+            panner.refDistance = 1.0;
             panner.maxDistance = 10000;
-            panner.rolloffFactor = 1;
+            panner.rolloffFactor = 1.0;
             panner.coneInnerAngle = 360;
             panner.coneOuterAngle = 360;
             panner.coneOuterGain = 0;
-            
-            // Connect source -> panner
-            source.connect(panner);
-            panner.connect(ctx.destination);
 
-            ws._8d = { ctx, panner, source, raf: null, isActive: false };
+            // Pinna / Head-Shadow dynamic lowpass filter (drops high freqs when behind head)
+            const rearFilter = ctx.createBiquadFilter();
+            rearFilter.type = 'lowpass';
+            rearFilter.frequency.setValueAtTime(20000, ctx.currentTime);
+            rearFilter.Q.setValueAtTime(0.7, ctx.currentTime);
+
+            // Proximity & Distance gain node
+            const rearGain = ctx.createGain();
+            rearGain.gain.setValueAtTime(1.0, ctx.currentTime);
+
+            // Spatial Ambience Reverb
+            const convolver = ctx.createConvolver();
+            convolver.buffer = createImpulseResponse(ctx, 0.5, 3.0);
+            const verbGain = ctx.createGain();
+            verbGain.gain.setValueAtTime(0.12, ctx.currentTime);
+
+            // Main output collector
+            const outGain = ctx.createGain();
+            outGain.connect(ctx.destination);
+
+            // Spatial chain: panner -> rearFilter -> rearGain -> outGain
+            panner.connect(rearFilter);
+            rearFilter.connect(rearGain);
+            rearGain.connect(outGain);
+
+            // Reverb chain: convolver -> verbGain -> outGain
+            convolver.connect(verbGain);
+            verbGain.connect(outGain);
+
+            ws._8d = {
+                ctx, panner, rearFilter, rearGain, convolver, verbGain, outGain,
+                source, raf: null, isActive: false, isCurrentlyApplied: false
+            };
             
-            // Animation loop for smooth 360 rotation
+            // Animation loop for smooth 360 rotation & spatial filtering
             const updatePan = () => {
                 if (ws._8d.isActive && !audioEl.paused) {
-                    const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
-                    const dir = sel8DDir ? sel8DDir.value : 'left';
-                    const pattern = sel8DPattern ? sel8DPattern.value : 'circle';
+                    const isTrimWs = (ws === wsTrim);
+                    const speed = isTrimWs
+                        ? (slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8)
+                        : (lastAppliedState?.eight_d_speed ?? 8);
+                    const dir = isTrimWs
+                        ? (sel8DDir ? sel8DDir.value : 'left')
+                        : (lastAppliedState?.eight_d_dir ?? 'left');
+                    const pattern = isTrimWs
+                        ? (sel8DPattern ? sel8DPattern.value : 'circle')
+                        : (lastAppliedState?.eight_d_pattern ?? 'circle');
+                    const radius = isTrimWs
+                        ? (slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0)
+                        : (lastAppliedState?.eight_d_radius ?? 2.0);
                     const t = ws.getCurrentTime();
                     
                     const mult = dir === 'left' ? -1 : 1;
@@ -538,26 +647,36 @@ function apply8D(ws, isGlobalEdited) {
                     if (isRadarDragging) {
                         angle = radarManualAngle;
                     } else {
-                        angle = (t / speed) * 2 * Math.PI * mult + radarAngleOffset;
+                        angle = (t / Math.max(1, speed)) * 2 * Math.PI * mult + radarAngleOffset;
                     }
                     
-                    // Adjust spatial radius based on pattern
-                    const radius = slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0;
-                    let x, z;
-                    
+                    let x, y, z;
                     if (pattern === 'ellipse') {
-                        x = Math.sin(angle) * (radius * 1.5);
-                        z = Math.cos(angle) * (radius * 0.5);
+                        x = Math.sin(angle) * (radius * 1.45);
+                        z = -Math.cos(angle) * (radius * 0.85);
+                        y = Math.cos(angle) * (radius * 0.2);
                     } else if (pattern === 'figure8') {
-                        x = Math.sin(angle) * radius;
-                        z = Math.sin(angle * 2) * (radius * 0.8);
+                        x = Math.sin(angle) * (radius * 1.25);
+                        z = -Math.sin(2 * angle) * (radius * 0.95);
+                        y = Math.cos(2 * angle) * (radius * 0.25);
                     } else { // circle
                         x = Math.sin(angle) * radius;
-                        z = Math.cos(angle) * radius;
+                        z = -Math.cos(angle) * radius;
+                        y = Math.sin(angle * 0.5) * (radius * 0.12);
                     }
                     
-                    ws._8d.panner.positionX.setTargetAtTime(x, ws._8d.ctx.currentTime, 0.05);
-                    ws._8d.panner.positionZ.setTargetAtTime(z, ws._8d.ctx.currentTime, 0.05);
+                    const now = ws._8d.ctx.currentTime;
+                    ws._8d.panner.positionX.setTargetAtTime(x, now, 0.04);
+                    ws._8d.panner.positionY.setTargetAtTime(y, now, 0.04);
+                    ws._8d.panner.positionZ.setTargetAtTime(z, now, 0.04);
+
+                    // Dynamic head-shadow effect: 20kHz when in front, down to 6.5kHz behind head
+                    const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
+                    const cutoff = 20000 - (rearFactor * 13500);
+                    const distGain = 1.0 - (rearFactor * 0.15);
+
+                    if (ws._8d.rearFilter) ws._8d.rearFilter.frequency.setTargetAtTime(cutoff, now, 0.04);
+                    if (ws._8d.rearGain) ws._8d.rearGain.gain.setTargetAtTime(distGain, now, 0.04);
                     
                     if (radarCanvas) {
                         const ctx = radarCanvas.getContext('2d');
@@ -565,19 +684,19 @@ function apply8D(ws, isGlobalEdited) {
                         const cx = radarCanvas.width / 2;
                         const cy = radarCanvas.height / 2;
                         
-                        // Map physical radius [0.5 - 5.0] to visual canvas radius [15 - 40]
-                        const rVis = 15 + ((radius - 0.5) / 4.5) * 25;
+                        // Map physical radius [0.5 - 5.0] to visual canvas radius [14 - 40]
+                        const rVis = 14 + ((radius - 0.5) / 4.5) * 26;
                         let visX, visY;
                         
                         if (pattern === 'ellipse') {
-                            visX = cx + Math.sin(angle) * (rVis * 1.5);
-                            visY = cy - Math.cos(angle) * (rVis * 0.5);
+                            visX = cx + Math.sin(angle) * (rVis * 1.35);
+                            visY = cy + Math.cos(angle) * (rVis * 0.8);
                         } else if (pattern === 'figure8') {
-                            visX = cx + Math.sin(angle) * rVis;
-                            visY = cy - Math.sin(angle * 2) * (rVis * 0.8);
+                            visX = cx + Math.sin(angle) * (rVis * 1.2);
+                            visY = cy + Math.sin(2 * angle) * (rVis * 0.85);
                         } else {
                             visX = cx + Math.sin(angle) * rVis;
-                            visY = cy - Math.cos(angle) * rVis;
+                            visY = cy + Math.cos(angle) * rVis;
                         }
                         
                         ctx.beginPath();
@@ -611,11 +730,12 @@ function apply8D(ws, isGlobalEdited) {
             if (shouldApply) {
                 try { ws._8d.source.disconnect(); } catch(e){}
                 ws._8d.source.connect(ws._8d.panner);
+                ws._8d.source.connect(ws._8d.convolver);
                 if (ws._8d.ctx.state === 'suspended') ws._8d.ctx.resume();
             } else {
                 // Bypass
                 try { ws._8d.source.disconnect(); } catch(e){}
-                ws._8d.source.connect(ws._8d.ctx.destination);
+                ws._8d.source.connect(ws._8d.outGain);
             }
         }
     }
@@ -948,7 +1068,8 @@ document.getElementById('btnExtraer').addEventListener('click', async () => {
             start: 0, end: round2(videoDuration),
             fadeIn: 0, fadeOut: 0, adjustVol: false, volLevel: 1.0,
             tempo: 1.0, normalizeVol: false, pitch: 0, reverse: false, auditorium: false,
-            eight_d: false, eight_d_dir: 'left', eight_d_speed: 8,
+            eight_d: false, eight_d_dir: 'left', eight_d_pattern: 'circle',
+            eight_d_speed: 8, eight_d_radius: 2.0,
         };
 
         resetEditorControls(); // M5: extracted helper
@@ -977,6 +1098,7 @@ document.getElementById('btnOpenTrim').addEventListener('click', () => {
     trimModal.classList.remove('hidden');
     document.body.classList.add('overflow-hidden');
     setActiveMode('playhead');
+    syncUIWithAppliedState();
 
     if (btnPlayTrim) btnPlayTrim.style.setProperty('--trim-progress', '0%');
     if (lblPlayTrim) lblPlayTrim.textContent = 'Escuchar Selección';
@@ -1076,47 +1198,8 @@ document.getElementById('btnCloseTrim').addEventListener('click', () => {
     document.body.classList.remove('overflow-hidden');
     
     // Revert UI to lastAppliedState since "Aplicar" was not pressed
-    if (lastAppliedState) {
-        if (chk8D) chk8D.checked = lastAppliedState.eight_d;
-        if (sel8DDir) sel8DDir.value = lastAppliedState.eight_d_dir;
-        if (slide8DSpeed) { 
-            slide8DSpeed.value = lastAppliedState.eight_d_speed; 
-            if (lbl8DSpeed) lbl8DSpeed.textContent = lastAppliedState.eight_d_speed + 's';
-        }
-        
-        if (tempoSlider) {
-            tempoSlider.value = lastAppliedState.tempo;
-            if (lblTempoValue) lblTempoValue.textContent = lastAppliedState.tempo.toFixed(2) + 'x';
-        }
-        if (pitchSlider) {
-            pitchSlider.value = lastAppliedState.pitch;
-            if (lblPitchValue) lblPitchValue.textContent = lastAppliedState.pitch + ' semitonos';
-        }
-        if (chkReverseAudio) chkReverseAudio.checked = lastAppliedState.reverse;
-        if (chkAuditorium) chkAuditorium.checked = lastAppliedState.auditorium;
-        if (chkNormalizeVolModal) chkNormalizeVolModal.checked = lastAppliedState.normalizeVol;
-        
-        if (chkAdjustVol) chkAdjustVol.checked = lastAppliedState.adjustVol;
-        if (volAdjustSlider) {
-            volAdjustSlider.value = lastAppliedState.volLevel;
-            if (lblVolAdjust) {
-                lblVolAdjust.textContent = Math.round(lastAppliedState.volLevel * 100) + '%';
-                lblVolAdjust.classList.toggle('opacity-50', !lastAppliedState.adjustVol);
-            }
-        }
-        
-        if (fInG) { fInG.value = lastAppliedState.fadeIn; if (lblFadeInG) lblFadeInG.textContent = lastAppliedState.fadeIn + 's'; }
-        if (fOutG) { fOutG.value = lastAppliedState.fadeOut; if (lblFadeOutG) lblFadeOutG.textContent = lastAppliedState.fadeOut + 's'; }
-        
-        trimStartTime = lastAppliedState.start;
-        trimEndTime = lastAppliedState.end;
-        if (inpStart) inpStart.value = trimStartTime.toFixed(2);
-        if (inpEnd) inpEnd.value = trimEndTime.toFixed(2);
-        if (trimRegion) trimRegion.setOptions({ start: trimStartTime, end: trimEndTime });
-        
-        checkIfStateChanged();
-        if (wsGlobal) applyLiveAudioMath(wsGlobal, isEditedViewActive);
-    }
+    syncUIWithAppliedState();
+    if (wsGlobal) applyLiveAudioMath(wsGlobal, isEditedViewActive);
 });
 
 btnApplyTrim.addEventListener('click', () => {
@@ -1262,20 +1345,19 @@ if (sel8DPattern) {
 }
 if (slide8DSpeed) {
     slide8DSpeed.addEventListener('input', () => {
-        lbl8DSpeed.textContent = slide8DSpeed.value + 's';
+        if (lbl8DSpeed) lbl8DSpeed.textContent = slide8DSpeed.value + 's';
         checkIfStateChanged();
         if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
         if (wsTrim) applyLiveAudioMath(wsTrim, false);
     });
-    
-    if (slide8DRadius) {
-        slide8DRadius.addEventListener('input', () => {
-            lbl8DRadius.textContent = parseFloat(slide8DRadius.value).toFixed(1) + 'm';
-            checkIfStateChanged();
-            if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
-            if (wsTrim) applyLiveAudioMath(wsTrim, false);
-        });
-    }
+}
+if (slide8DRadius) {
+    slide8DRadius.addEventListener('input', () => {
+        if (lbl8DRadius) lbl8DRadius.textContent = parseFloat(slide8DRadius.value).toFixed(1) + 'm';
+        checkIfStateChanged();
+        if (wsGlobal) applyLiveAudioMath(wsGlobal, true);
+        if (wsTrim) applyLiveAudioMath(wsTrim, false);
+    });
 }
 
 if (radarCanvas) {
@@ -1591,45 +1673,6 @@ btnProcess.addEventListener('click', async () => {
 
 // ── Audio Reverse ─────────────────────────────────────────────────────────────
 
-/** Encode an AudioBuffer to a WAV Blob. Inline stereo interleave avoids allocation of a temp array. */
-function audioBufferToWav(buffer) {
-    const numChannels    = buffer.numberOfChannels;
-    const sampleRate     = buffer.sampleRate;
-    const bytesPerSample = 2; // 16-bit PCM
-    const blockAlign     = numChannels * bytesPerSample;
-
-    // Interleave channels inline
-    const ch0    = buffer.getChannelData(0);
-    const ch1    = numChannels > 1 ? buffer.getChannelData(1) : null;
-    const frames = ch0.length;
-    const pcm    = new Float32Array(frames * numChannels);
-    for (let i = 0, j = 0; i < frames; i++) {
-        pcm[j++] = ch0[i];
-        if (ch1) pcm[j++] = ch1[i];
-    }
-
-    const dataBytes = pcm.length * bytesPerSample;
-    const ab        = new ArrayBuffer(44 + dataBytes);
-    const v         = new DataView(ab);
-    const wStr      = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-
-    wStr(0,  'RIFF'); v.setUint32(4,  36 + dataBytes, true);
-    wStr(8,  'WAVE'); wStr(12, 'fmt ');
-    v.setUint32(16, 16, true);  v.setUint16(20, 1, true);
-    v.setUint16(22, numChannels, true);  v.setUint32(24, sampleRate, true);
-    v.setUint32(28, sampleRate * blockAlign, true);
-    v.setUint16(32, blockAlign, true);  v.setUint16(34, 16, true);
-    wStr(36, 'data'); v.setUint32(40, dataBytes, true);
-
-    let off = 44;
-    for (let i = 0; i < pcm.length; i++, off += 2) {
-        const s = Math.max(-1, Math.min(1, pcm[i]));
-        v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-
-    return new Blob([ab], { type: 'audio/wav' });
-}
-
 /** Fetch, reverse, and store the audio as a local Blob URL. Returns a Promise. */
 async function prepareReversedAudioUrl(url) {
     try {
@@ -1695,24 +1738,25 @@ if (btnClearHistory) btnClearHistory.addEventListener('click', clearHistory);
 
 renderHistory();
 
-// ─── Offline Audio Rendering (100% Fidelity Export) ──────────────────────────
+// ─── Offline Audio Rendering (100% Fidelity Export with 8D Support) ────────────
 
 async function renderOfflineAudio() {
     let urlToRender = audioUrlGlobal;
-    if (chkAuditorium?.checked && auditoriumAudioUrl) urlToRender = auditoriumAudioUrl;
-    else if (chkReverseAudio?.checked && reversedAudioUrl) urlToRender = reversedAudioUrl;
+    if (lastAppliedState?.auditorium && auditoriumAudioUrl) urlToRender = auditoriumAudioUrl;
+    else if (lastAppliedState?.reverse && reversedAudioUrl) urlToRender = reversedAudioUrl;
 
     const arrayBuf = await (await fetch(urlToRender)).arrayBuffer();
     const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
     const srcBuf = await tempCtx.decodeAudioData(arrayBuf);
+    tempCtx.close().catch(() => {});
 
-    const start = trimStartTime;
-    const end = trimEndTime;
+    const start = lastAppliedState?.start ?? 0;
+    const end = lastAppliedState?.end ?? (videoDuration || srcBuf.duration);
     const durationSecs = end - start;
     if (durationSecs <= 0) throw new Error("Duración inválida");
 
-    const tempoVal = parseFloat(tempoSlider ? tempoSlider.value : 1.0);
-    const pitchVal = parseInt(pitchSlider ? pitchSlider.value : 0, 10);
+    const tempoVal = lastAppliedState?.tempo ?? 1.0;
+    const pitchVal = lastAppliedState?.pitch ?? 0;
     const pitchFactor = Math.pow(2, pitchVal / 12);
     const rate = Math.max(0.25, Math.min(4.0, tempoVal * pitchFactor));
 
@@ -1728,13 +1772,13 @@ async function renderOfflineAudio() {
 
     // Volume & Normalization
     const volNode = offlineCtx.createGain();
-    let maxVol = chkAdjustVol.checked ? parseFloat(volAdjustSlider.value) : 1.0;
-    if (chkNormalizeVolModal?.checked) maxVol *= 1.45;
+    let maxVol = lastAppliedState?.adjustVol ? (lastAppliedState.volLevel ?? 1.0) : 1.0;
+    if (lastAppliedState?.normalizeVol) maxVol *= 1.45;
     volNode.gain.value = Math.max(0, Math.min(2.0, maxVol));
 
     // Fades
-    const inSec = parseFloat(fInG.value);
-    const outSec = parseFloat(fOutG.value);
+    const inSec = lastAppliedState?.fadeIn ?? 0;
+    const outSec = lastAppliedState?.fadeOut ?? 0;
     const fadeNode = offlineCtx.createGain();
     fadeNode.gain.setValueAtTime(0, 0);
     if (inSec > 0) {
@@ -1747,114 +1791,97 @@ async function renderOfflineAudio() {
         fadeNode.gain.linearRampToValueAtTime(0, finalDuration);
     }
 
-    // 8D Effect
-    const shouldApply8D = chk8D && chk8D.checked;
-    let lastNode = fadeNode;
+    source.connect(volNode);
+    volNode.connect(fadeNode);
+
+    // 8D Spatial Audio Effect
+    const shouldApply8D = lastAppliedState?.eight_d ?? false;
     
     if (shouldApply8D) {
         const panner = offlineCtx.createPanner();
         panner.panningModel = 'HRTF';
         panner.distanceModel = 'inverse';
-        panner.refDistance = 1;
+        panner.refDistance = 1.0;
         panner.maxDistance = 10000;
-        panner.rolloffFactor = 1;
+        panner.rolloffFactor = 1.0;
+        panner.coneInnerAngle = 360;
+        panner.coneOuterAngle = 360;
+        panner.coneOuterGain = 0;
 
-        const speed = slide8DSpeed ? parseFloat(slide8DSpeed.value) : 8;
-        const dir = sel8DDir ? sel8DDir.value : 'left';
-        const pattern = sel8DPattern ? sel8DPattern.value : 'circle';
-        const radius = slide8DRadius ? parseFloat(slide8DRadius.value) : 2.0;
+        // Dynamic Pinna / Head-Shadow lowpass filter
+        const rearFilter = offlineCtx.createBiquadFilter();
+        rearFilter.type = 'lowpass';
+        rearFilter.Q.setValueAtTime(0.7, 0);
+
+        // Distance & Proximity Gain
+        const rearGain = offlineCtx.createGain();
+
+        // Spatial Ambience Reverb
+        const convolver = offlineCtx.createConvolver();
+        convolver.buffer = createImpulseResponse(offlineCtx, 0.5, 3.0);
+        const verbGain = offlineCtx.createGain();
+        verbGain.gain.setValueAtTime(0.12, 0);
+
+        const speed = lastAppliedState?.eight_d_speed ?? 8;
+        const dir = lastAppliedState?.eight_d_dir ?? 'left';
+        const pattern = lastAppliedState?.eight_d_pattern ?? 'circle';
+        const radius = lastAppliedState?.eight_d_radius ?? 2.0;
         const mult = dir === 'left' ? -1 : 1;
 
-        const fps = 30;
-        const frames = Math.ceil(finalDuration * fps) || 1;
+        const fps = 100;
+        const frames = Math.max(2, Math.ceil(finalDuration * fps));
         const curveX = new Float32Array(frames);
+        const curveY = new Float32Array(frames);
         const curveZ = new Float32Array(frames);
+        const curveCutoff = new Float32Array(frames);
+        const curveDistGain = new Float32Array(frames);
         
         for (let i = 0; i < frames; i++) {
-            const t = (i / fps) * rate; // adjust time mathematically for speed
-            const angle = (t / speed) * 2 * Math.PI * mult;
+            const t = (i / fps) * rate; // adjust time for playback speed
+            const angle = (t / Math.max(1, speed)) * 2 * Math.PI * mult;
+            let x, y, z;
             if (pattern === 'ellipse') {
-                curveX[i] = Math.sin(angle) * (radius * 1.5);
-                curveZ[i] = Math.cos(angle) * (radius * 0.5);
+                x = Math.sin(angle) * (radius * 1.45);
+                z = -Math.cos(angle) * (radius * 0.85);
+                y = Math.cos(angle) * (radius * 0.2);
             } else if (pattern === 'figure8') {
-                curveX[i] = Math.sin(angle) * radius;
-                curveZ[i] = Math.sin(angle * 2) * (radius * 0.8);
-            } else {
-                curveX[i] = Math.sin(angle) * radius;
-                curveZ[i] = Math.cos(angle) * radius;
+                x = Math.sin(angle) * (radius * 1.25);
+                z = -Math.sin(2 * angle) * (radius * 0.95);
+                y = Math.cos(2 * angle) * (radius * 0.25);
+            } else { // circle
+                x = Math.sin(angle) * radius;
+                z = -Math.cos(angle) * radius;
+                y = Math.sin(angle * 0.5) * (radius * 0.12);
             }
+            curveX[i] = x;
+            curveY[i] = y;
+            curveZ[i] = z;
+            const rearFactor = Math.min(1.0, Math.max(0.0, z / (radius || 1)));
+            curveCutoff[i] = 20000 - (rearFactor * 13500);
+            curveDistGain[i] = 1.0 - (rearFactor * 0.15);
         }
         
         panner.positionX.setValueCurveAtTime(curveX, 0, finalDuration);
+        panner.positionY.setValueCurveAtTime(curveY, 0, finalDuration);
         panner.positionZ.setValueCurveAtTime(curveZ, 0, finalDuration);
-        panner.positionY.setValueAtTime(0, 0);
-        
-        lastNode.connect(panner);
-        lastNode = panner;
-    }
+        rearFilter.frequency.setValueCurveAtTime(curveCutoff, 0, finalDuration);
+        rearGain.gain.setValueCurveAtTime(curveDistGain, 0, finalDuration);
 
-    source.connect(volNode);
-    volNode.connect(fadeNode);
-    lastNode.connect(offlineCtx.destination);
+        // Dry spatial path: fadeNode -> panner -> rearFilter -> rearGain -> destination
+        fadeNode.connect(panner);
+        panner.connect(rearFilter);
+        rearFilter.connect(rearGain);
+        rearGain.connect(offlineCtx.destination);
+
+        // Wet spatial reverb path: fadeNode -> convolver -> verbGain -> destination
+        fadeNode.connect(convolver);
+        convolver.connect(verbGain);
+        verbGain.connect(offlineCtx.destination);
+    } else {
+        fadeNode.connect(offlineCtx.destination);
+    }
 
     source.start(0, start, durationSecs);
     const renderedBuffer = await offlineCtx.startRendering();
     return audioBufferToWav(renderedBuffer);
-}
-
-function audioBufferToWav(buffer) {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const format = 1; // PCM
-    const bitDepth = 16;
-    
-    let result;
-    if (numChannels === 2) {
-        const channel1 = buffer.getChannelData(0);
-        const channel2 = buffer.getChannelData(1);
-        const length = channel1.length + channel2.length;
-        result = new Float32Array(length);
-        let index = 0;
-        let inputIndex = 0;
-        while (index < length) {
-            result[index++] = channel1[inputIndex];
-            result[index++] = channel2[inputIndex];
-            inputIndex++;
-        }
-    } else {
-        result = buffer.getChannelData(0);
-    }
-    
-    const bytesPerSample = bitDepth / 8;
-    const blockAlign = numChannels * bytesPerSample;
-    const wavBuffer = new ArrayBuffer(44 + result.length * bytesPerSample);
-    const view = new DataView(wavBuffer);
-    
-    const writeString = (view, offset, string) => {
-        for (let i = 0; i < string.length; i++) {
-            view.setUint8(offset + i, string.charCodeAt(i));
-        }
-    };
-    
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + result.length * bytesPerSample, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * blockAlign, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, result.length * bytesPerSample, true);
-    
-    let offset = 44;
-    for (let i = 0; i < result.length; i++, offset += 2) {
-        let s = Math.max(-1, Math.min(1, result[i]));
-        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-    
-    return new Blob([view], { type: 'audio/wav' });
 }
