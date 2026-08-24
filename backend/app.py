@@ -145,6 +145,7 @@ def extract():
             "outtmpl":        os.path.join(DOWNLOAD_DIR, "%(id)s.%(ext)s"),
             "noplaylist":     True,
             "quiet":          True,
+            "no_warnings":    True,
             "progress_hooks": [ytdl_hook],
         }
 
